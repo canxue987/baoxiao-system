@@ -114,6 +114,23 @@ include 'header.php';
         </div>
         <?php endforeach; ?>
     </div>
+    
+    <div class="card" style="margin-bottom:24px; background:#f9f9f9; border:1px dashed #d9d9d9;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <strong style="font-size:16px; margin-right:10px;"><i class="ri-file-excel-2-line"></i> 批量操作</strong>
+                <span style="color:#666; font-size:13px;">当前档期：<?php echo h($batches[array_search($active_batch_id, array_column($batches, 'id'))]['name']); ?></span>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&type=csv" target="_blank" class="btn btn-primary" style="background:#217346; border-color:#217346;">
+                    <i class="ri-file-excel-2-line"></i> 导出全员明细表 (Excel)
+                </a>
+                <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&type=zip" target="_blank" class="btn btn-primary" style="background:#0050b3; border-color:#0050b3;">
+                    <i class="ri-folder-zip-line"></i> 打包全员附件 (Zip)
+                </a>
+            </div>
+        </div>
+    </div>
 
     <div class="card">
         <h3><i class="ri-team-line"></i> 员工申报列表</h3>
@@ -132,7 +149,17 @@ include 'header.php';
                     <td style="font-weight:bold;">¥<?php echo number_format($u['total'], 2); ?></td>
                     <td>
                         <a href="index.php?batch_id=<?php echo $active_batch_id; ?>&view_user=<?php echo $u['id']; ?>" class="btn btn-primary btn-sm"><i class="ri-file-list-line"></i> 详情 & 审核</a>
-                        <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>" class="btn btn-ghost btn-sm"><i class="ri-download-cloud-2-line"></i> 下载附件</a>
+                        <div style="display:flex; gap:5px;">
+                            <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=csv" class="btn btn-ghost btn-sm" style="color:#217346; border-color:#b7eb8f;" title="导出Excel">
+                                <i class="ri-file-excel-2-line"></i> 表格
+                            </a>
+                            <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=zip" class="btn btn-ghost btn-sm" title="下载附件包">
+                                <i class="ri-folder-zip-line"></i> 附件
+                            </a>
+                            <a href="index.php?batch_id=<?php echo $active_batch_id; ?>&view_user=<?php echo $u['id']; ?>" class="btn btn-primary btn-sm">
+                                <i class="ri-file-list-line"></i> 审核
+                            </a>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -156,7 +183,7 @@ include 'header.php';
                         <?php if($b['status']=='open'): ?>
                             <a href="action.php?close_batch=<?php echo $b['id']; ?>" class="btn btn-ghost btn-sm" onclick="return confirm('关闭后员工将无法再提交，确定吗？')"><i class="ri-lock-2-line"></i> 关闭</a>
                         <?php endif; ?>
-                        <a href="action.php?del_batch=<?php echo $b['id']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('⚠️ 高危操作！\n确定要删除这个档期吗？\n所有图片文件和记录都会被永久删除，无法恢复！')"><i class="ri-delete-bin-line"></i> 删除</a>
+                        <a href="action.php?del_batch=<?php echo $b['id']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('高危操作！\n确定要删除这个档期吗？\n所有图片文件和记录都会被永久删除，无法恢复！')"><i class="ri-delete-bin-line"></i> 删除</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
