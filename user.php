@@ -23,7 +23,7 @@ include 'header.php';
 <?php if($current_batch): ?>
     <div class="card">
         <h3 style="border-bottom:1px solid #f0f0f0; padding-bottom:15px; margin-bottom:20px;">
-            当前档期：<span style="color:var(--primary-color)"><?php echo $current_batch['name']; ?></span>
+            当前档期：<span style="color:var(--primary-color)"><?php echo h($current_batch['name']); ?></span>
         </h3>
         
         <form action="action.php" method="post" enctype="multipart/form-data">
@@ -56,14 +56,14 @@ include 'header.php';
                 <?php foreach($my_items as $item): ?>
                 <tr>
                     <td>
-                        <span class="tag tag-blue"><?php echo $item['company']; ?></span>
+                        <span class="tag tag-blue"><?php echo h($item['company']); ?></span>
                             <?php echo $item['company']; ?>
                         </span>
                     </td>
                     <td>
                         <div><?php echo $item['expense_date']; ?></div>
                         <div style="font-size:12px; color:var(--text-sub); margin-top:4px;">
-                            <?php echo $item['category']; ?> - <?php echo $item['type']; ?>
+                            <?php echo h($item['category']); ?> - <?php echo h($item['type']); ?>
                         </div>
                     </td>
                     <td>
@@ -71,7 +71,7 @@ include 'header.php';
                         <div style="font-size:12px; color:var(--text-sub);">票: ¥<?php echo $item['invoice_amount']; ?></div>
                         <?php if($item['is_substitute']) echo "<span class='tag' style='background:#fff7e6; color:#faad14; border:none;'>替</span>"; ?>
                     </td>
-                    <td style="max-width:200px;"><?php echo $item['note']; ?></td>
+                    <td style="max-width:200px;"><?php echo h($item['note']); ?></td>
                     <td>
                         <?php 
                         $invs = json_decode($item['invoice_path'] ?: '[]');
@@ -86,7 +86,7 @@ include 'header.php';
                             <a href="action.php?action=delete&id=<?php echo $item['id']; ?>" class="btn btn-ghost btn-sm" onclick="return confirm('确定撤回？')">撤回</a>
                         <?php elseif($item['status']=='rejected'): ?>
                             <div style="color:var(--danger)">已驳回</div>
-                            <div style="font-size:11px; color:var(--text-sub);"><?php echo $item['reject_reason']; ?></div>
+                            <div style="font-size:11px; color:var(--text-sub);"><?php echo h($item['reject_reason']); ?></div>
                             <a href="action.php?action=delete&id=<?php echo $item['id']; ?>" style="font-size:12px; text-decoration:underline; color:var(--danger);">删除重填</a>
                         <?php else: ?>
                             <span style="color:var(--success)">已通过</span>

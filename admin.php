@@ -43,7 +43,7 @@ include 'header.php';
             <select onchange="location.href='index.php?batch_id='+this.value" style="width:auto; padding:6px;">
                 <?php foreach($batches as $b): ?>
                     <option value="<?php echo $b['id']; ?>" <?php if($b['id']==$active_batch_id) echo 'selected'; ?>>
-                        <?php echo $b['name']; ?> (<?php echo $b['status']=='open'?'开启':'关闭'; ?>)
+                        <?php echo h($b['name']); ?>(<?php echo $b['status']=='open'?'开启':'关闭'; ?>)
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -89,7 +89,7 @@ include 'header.php';
     <div class="stat-grid" style="margin-bottom:24px;">
         <?php foreach($comp_stats as $comp_name => $data): ?>
         <div class="card">
-            <h4><?php echo $comp_name; ?></h4>
+            <h4><?php echo h($comp_name); ?></h4>
             <div style="background:#fafafa; padding:15px; border-radius:6px; margin-bottom:15px;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
                     <span style="color:var(--text-sub)">报销额:</span>
@@ -105,7 +105,7 @@ include 'header.php';
             <table class="data-table" style="font-size:12px;">
                 <?php foreach($data['types'] as $type => $d): ?>
                 <tr>
-                    <td style="padding:6px 0;"><?php echo $type; ?></td>
+                    <td style="padding:6px 0;"><td><?php echo h($type); ?></td>
                     <td style="padding:6px 0; text-align:right; color:var(--text-sub);"><?php echo $d['sheets']; ?>张</td>
                     <td style="padding:6px 0; text-align:right; font-weight:bold;">¥<?php echo number_format($d['amt'], 2); ?></td>
                 </tr>
@@ -127,7 +127,7 @@ include 'header.php';
             <tbody>
                 <?php foreach($users as $u): ?>
                 <tr>
-                    <td><?php echo $u['realname']; ?></td>
+                    <td><?php echo h($u['realname']); ?></td>
                     <td><?php echo $u['cnt']; ?> 笔</td>
                     <td style="font-weight:bold;">¥<?php echo number_format($u['total'], 2); ?></td>
                     <td>
@@ -141,14 +141,14 @@ include 'header.php';
     </div>
 
     <div class="card" style="margin-top:24px;">
-        <h3>📂 历史档期管理</h3>
+        <h3>历史档期管理</h3>
         <table class="data-table">
             <thead><tr><th>ID</th><th>名称</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
                 <?php foreach($batches as $b): ?>
                 <tr style="<?php if($b['id']==$active_batch_id) echo 'background:#e6f7ff'; ?>">
                     <td><?php echo $b['id']; ?></td>
-                    <td><?php echo $b['name']; ?></td>
+                    <td><?php echo h($b['name']); ?></td>
                     <td>
                         <?php echo $b['status']=='open' ? '<span class="tag tag-green">开启</span>' : '<span class="tag">关闭</span>'; ?>
                     </td>
@@ -201,7 +201,7 @@ include 'header.php';
     
     <div class="card" style="margin-bottom:24px;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f0f0f0; padding-bottom:15px; margin-bottom:15px;">
-            <h3>👤 <?php echo $curr_name; ?> 的报销明细</h3>
+            <h3>👤 <?php echo h($curr_name); ?> 的报销明细</h3>
             <a href="index.php?batch_id=<?php echo $active_batch_id; ?>" class="btn btn-ghost">← 返回列表</a>
         </div>
 
@@ -244,9 +244,9 @@ include 'header.php';
 
 <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <h4>📋 原始单据审核</h4>
+            <h4>原始单据审核</h4>
             <button onclick="approveAll(<?php echo $active_batch_id; ?>, <?php echo $view_user_id; ?>)" class="btn btn-primary" style="background:#52c41a; border-color:#52c41a;">
-                ⚡ 本页一键全部通过
+                本页一键全部通过
             </button>
         </div>
 
@@ -263,17 +263,17 @@ include 'header.php';
                     $sups = json_decode($item['support_path'] ?: '[]');
                 ?>
                 <tr style="<?php if($item['status']=='rejected') echo 'background:#fff1f0; opacity:0.6;'; elseif($item['status']=='approved') echo 'background:#f6ffed;'; ?>">
-                    <td><span class="tag tag-blue"><?php echo $item['company']; ?>"><?php echo $item['company']; ?></span></td>
+                    <td><span class="tag tag-blue"><?php echo h($item['company']); ?>"><?php echo h($item['company']); ?></span></td>
                     <td>
                         <div><?php echo $item['expense_date']; ?></div>
-                        <div style="font-size:12px; color:var(--text-sub);"><?php echo $item['category']; ?> - <?php echo $item['type']; ?></div>
+                        <div style="font-size:12px; color:var(--text-sub);"><?php echo h($item['category']); ?> - <?php echo h($item['type']); ?></div>
                     </td>
                     <td>
                         <span style="font-weight:bold; color:var(--danger)">¥<?php echo $item['amount']; ?></span> / 
                         <span style="color:var(--text-sub); font-size:12px;">¥<?php echo $item['invoice_amount']; ?></span>
                         <div style="font-size:11px; color:var(--text-sub);">(<?php echo count($invs); ?>张票)</div>
                     </td>
-                    <td style="max-width:200px;"><?php echo $item['note']; ?></td>
+                    <td style="max-width:200px;"><?php echo h($item['note']); ?></td>
                     <td>
                         <?php 
                         // 修改：点击触发 JS 预览

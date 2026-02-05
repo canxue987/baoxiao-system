@@ -13,7 +13,6 @@ if (isset($_POST['add_user'])) {
     $u_name = $_POST['new_username'];
     $u_real = $_POST['new_realname'];
     $u_pass = password_hash($_POST['new_password'], PASSWORD_DEFAULT);
-    $hash_pass = password_hash($u_pass, PASSWORD_DEFAULT);
     
     $check = $pdo->prepare("SELECT id FROM users WHERE username=?");
     $check->execute([$u_name]);
@@ -84,8 +83,8 @@ include 'header.php';
             <?php foreach($all_users as $u): ?>
             <tr>
                 <td><?php echo $u['id']; ?></td>
-                <td><strong><?php echo $u['username']; ?></strong></td>
-                <td><?php echo $u['realname']; ?></td>
+                <td><strong><?php echo h($u['username']); ?></strong></td>
+                <td><?php echo h($u['realname']); ?></td>
                 <td>
                     <?php if($u['role']=='admin'): ?>
                         <span class="tag tag-blue">管理员</span>

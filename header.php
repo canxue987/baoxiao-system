@@ -56,7 +56,7 @@ if (empty($sys_companies)) {
     </div>
 
     <div class="user-info">
-        <div>当前用户：<?php echo $_SESSION['realname']; ?></div>
+        <div>当前用户：<?php echo h($_SESSION['realname']); ?></div>
         <div style="margin-top:5px;">
             <a href="login.php" style="color:#ff4d4f; text-decoration:none;">退出登录</a>
         </div>

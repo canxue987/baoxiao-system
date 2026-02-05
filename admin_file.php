@@ -35,7 +35,7 @@ include 'header.php';
                     <option value="">-- 请选择员工 --</option>
                     <?php foreach($users as $u): ?>
                         <option value="<?php echo $u['id']; ?>">
-                            <?php echo $u['realname']; ?> (<?php echo $u['username']; ?>)
+                            <?php echo h($u['realname']); ?> (<?php echo h($u['username']); ?>)
                         </option>
                     <?php endforeach; ?>
                 </select>
