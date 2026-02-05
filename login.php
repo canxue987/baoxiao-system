@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 企业报销系统</title>
+    <title>登录 - <?php echo h($sys_config['name']); ?></title>
     <link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
     <style>
         /* 登录页专用样式覆盖 */
@@ -69,7 +69,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <body>
 
     <div class="login-card">
-        <div class="logo">报销管理系统</div>
+        <div class="logo">
+            <?php if(!empty($sys_config['logo'])): ?>
+                <img src="<?php echo h($sys_config['logo']); ?>" style="height:48px; margin-bottom:10px;">
+                <div style="font-size:20px;"><?php echo h($sys_config['name']); ?></div>
+            <?php else: ?>
+                <i class="ri-shield-keyhole-line"></i> <?php echo h($sys_config['name']); ?>
+            <?php endif; ?>
+        </div>
         
         <?php if($error): ?>
             <div class="err-msg">⚠️ <?php echo $error; ?></div>

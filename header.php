@@ -22,7 +22,7 @@ if (empty($sys_companies)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企业报销管理系统</title>
+    <title><?php echo h($sys_config['name']); ?></title>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
     <script>
@@ -32,8 +32,17 @@ if (empty($sys_companies)) {
 <body>
 
 <div class="sidebar">
-    <div class="logo-area">
-        报销管理系统
+        <div class="logo-area" style="overflow:hidden;">
+            <?php if(!empty($sys_config['logo'])): ?>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <img src="<?php echo h($sys_config['logo']); ?>" style="height:32px; width:auto;">
+                    <span style="font-size:16px;"><?php echo h($sys_config['name']); ?></span>
+                </div>
+            <?php else: ?>
+                <i class="ri-shield-keyhole-line" style="font-size:20px; margin-right:8px;"></i> 
+                <?php echo h($sys_config['name']); ?>
+            <?php endif; ?>
+        </div>
     </div>
     
     <div class="nav-menu">

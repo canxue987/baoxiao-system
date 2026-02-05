@@ -63,6 +63,21 @@ try {
     die("DB Error: " . $e->getMessage());
 }
 
+// --- 新增：加载系统配置 (名称 & Logo) ---
+$settings_file = __DIR__ . '/db/settings.json';
+// 默认配置
+$sys_config = [
+    'name' => '企业报销管理系统', 
+    'logo' => ''
+];
+
+if (file_exists($settings_file)) {
+    $loaded = json_decode(file_get_contents($settings_file), true);
+    if (is_array($loaded)) {
+        $sys_config = array_merge($sys_config, $loaded);
+    }
+}
+
 function h($str) {
     return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
 }
