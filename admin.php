@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 
 // --- 逻辑处理：新建档期 ---
 if (isset($_POST['new_batch'])) {

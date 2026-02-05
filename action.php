@@ -1,6 +1,6 @@
 <?php
 // action.php
-require 'config.php';
+require_once 'config.php';
 if (!isset($_SESSION['user_id'])) die("未登录");
 
 $action = $_REQUEST['action'] ?? '';

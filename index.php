@@ -1,6 +1,6 @@
 <?php
 // index.php - 路由分发器
-require 'config.php';
+require_once 'config.php';;
 
 // 1. 如果没登录，踢回登录页
 if (!isset($_SESSION['user_id'])) {

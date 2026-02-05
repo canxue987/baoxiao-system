@@ -1,5 +1,5 @@
 <?php
-require 'config.php';
+require_once 'config.php';
 // 逻辑处理
 $stmt = $pdo->query("SELECT * FROM batches WHERE status='open' ORDER BY id DESC LIMIT 1");
 $current_batch = $stmt->fetch(PDO::FETCH_ASSOC);
