@@ -48,13 +48,7 @@ include 'header.php';
         <a href="admin.php" class="btn btn-ghost"><i class="ri-arrow-left-line"></i> 返回仪表盘</a>
     </div>
 
-    <div style="background:#fff7e6; border:1px solid #ffd591; padding:15px; border-radius:6px; margin-bottom:24px; color:#d48806; font-size:13px;">
-        <i class="ri-error-warning-line"></i> <strong>提示：</strong> 
-        这里的修改仅影响“填报页面”的下拉选项。已生成的历史报销记录中的公司名不会被改变。
-        <br>配置文件路径：<code>/db/companies.json</code> (不会被上传到 git)
-    </div>
-
-    <h4>🏢 公司主体管理</h4>
+    <h4>公司主体管理</h4>
     
     <div style="margin-bottom:20px;">
         <?php if(empty($companies)): ?>
