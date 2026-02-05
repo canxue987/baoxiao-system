@@ -54,11 +54,16 @@ try {
     // 初始化用户
     $stmt = $pdo->query("SELECT count(*) FROM users WHERE username='admin'");
     if ($stmt->fetchColumn() == 0) {
-        $pdo->exec("INSERT INTO users (username, password, realname, role) VALUES ('admin', '123456', '管理员', 'admin')");
-        $pdo->exec("INSERT INTO users (username, password, realname, role) VALUES ('user01', '123456', '测试员', 'user')");
+        $default_pass = password_hash('123456', PASSWORD_DEFAULT);
+        $pdo->exec("INSERT INTO users (username, password, realname, role) VALUES ('admin', '$default_pass', '管理员', 'admin')");
+        $pdo->exec("INSERT INTO users (username, password, realname, role) VALUES ('user01', '$default_pass', '测试员', 'user')");
     }
 
 } catch (PDOException $e) {
     die("DB Error: " . $e->getMessage());
+}
+
+function h($str) {
+    return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
 }
 ?>

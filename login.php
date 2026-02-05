@@ -6,11 +6,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $username = $_POST['username'];
     $password = $_POST['password'];
 
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND password = ?");
-    $stmt->execute([$username, $password]);
+   // 修改：只根据用户名查询，然后验证哈希密码
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+    $stmt->execute([$username]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($user) {
+    // 使用 password_verify 验证密码
+    if ($user && password_verify($password, $user['password'])) {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['realname'] = $user['realname'];
         $_SESSION['role'] = $user['role'];

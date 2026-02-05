@@ -12,7 +12,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
 if (isset($_POST['add_user'])) {
     $u_name = $_POST['new_username'];
     $u_real = $_POST['new_realname'];
-    $u_pass = $_POST['new_password'];
+    $u_pass = password_hash($_POST['new_password'], PASSWORD_DEFAULT);
+    $hash_pass = password_hash($u_pass, PASSWORD_DEFAULT);
     
     $check = $pdo->prepare("SELECT id FROM users WHERE username=?");
     $check->execute([$u_name]);
@@ -37,10 +38,12 @@ if (isset($_GET['del_user'])) {
 // 3. 修改密码 (新增功能)
 if (isset($_POST['reset_password'])) {
     $target_id = $_POST['target_id'];
-    $new_pass = $_POST['new_pass'];
-    if (!empty($new_pass)) {
+    $raw_pass = $_POST['new_pass'];
+    if (!empty($raw_pass)) {
+        // 修改：加密新密码
+        $safe_pass = password_hash($raw_pass, PASSWORD_DEFAULT);
         $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-        $stmt->execute([$new_pass, $target_id]);
+        $stmt->execute([$safe_pass, $target_id]);
         echo "<script>alert('密码修改成功！'); window.location.href='users.php';</script>";
     }
 }

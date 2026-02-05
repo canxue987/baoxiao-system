@@ -36,6 +36,10 @@ if ($action == 'add_items' && $_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($amount <= 0) continue;
 
         $company = $item['company'];
+        // --- 安全检查 1: 过滤公司名称特殊字符 ---
+        if (!preg_match('/^[\x{4e00}-\x{9fa5}A-Za-z0-9_\-]+$/u', $company)) {
+            die("错误：公司名称包含非法字符，可能存在安全风险。");
+        }
         
         // 建立公司文件夹
         $comp_dir = "$root_dir/$company"; 
@@ -53,6 +57,11 @@ if ($action == 'add_items' && $_SERVER['REQUEST_METHOD'] == 'POST') {
             for ($i = 0; $i < $count; $i++) {
                 if ($_FILES[$f_key]['error'][$i] == 0) {
                     $ext = pathinfo($_FILES[$f_key]['name'][$i], PATHINFO_EXTENSION);
+                    // --- 安全检查 2: 限制上传文件类型 ---
+                    $allowed_exts = ['jpg', 'jpeg', 'png', 'pdf', 'gif'];
+                    if (!in_array(strtolower($ext), $allowed_exts)) {
+                        continue; // 如果不是允许的类型，直接跳过，不保存
+                    }
                     $fname = "{$item['type']}_{$amount}_{$item['date']}_{$i}.{$ext}";
                     $target = "$comp_dir/Invoices/$fname";
                     if (move_uploaded_file($_FILES[$f_key]['tmp_name'][$i], $target)) {
