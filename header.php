@@ -32,17 +32,20 @@ if (empty($sys_companies)) {
 <body>
 
 <div class="sidebar">
-        <div class="logo-area" style="overflow:hidden;">
+    <div class="logo-area" style="overflow:hidden;">
             <?php if(!empty($sys_config['logo'])): ?>
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <img src="<?php echo h($sys_config['logo']); ?>" style="height:32px; width:auto;">
-                    <span style="font-size:16px;"><?php echo h($sys_config['name']); ?></span>
+                <img src="<?php echo h($sys_config['logo']); ?>" style="height:56px; width:auto; max-width:100%; object-fit:contain;">
+                <div style="line-height:1.5; color:#fff;">
+                    <?php echo h($sys_config['name']); ?>
                 </div>
             <?php else: ?>
-                <i class="ri-shield-keyhole-line" style="font-size:20px; margin-right:8px;"></i> 
-                <?php echo h($sys_config['name']); ?>
+                <div style="background:rgba(255,255,255,0.1); width:56px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center;">
+                    <i class="ri-shield-keyhole-line" style="font-size:32px; margin:0; color:#4096ff;"></i>
+                </div>
+                <div style="line-height:1.5; color:#fff;">
+                    <?php echo h($sys_config['name']); ?>
+                </div>
             <?php endif; ?>
-        </div>
     </div>
     
     <div class="nav-menu">

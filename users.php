@@ -55,12 +55,12 @@ include 'header.php';
 
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-        <h3>👥 人员管理</h3>
-        <a href="admin.php" class="btn btn-ghost">← 返回仪表盘</a>
+        <h3><i class="ri-team-line"></i> 人员管理</h3>
+        <a href="admin.php" class="btn btn-ghost"><i class="ri-arrow-left-line"></i> 返回仪表盘</a>
     </div>
     
     <div style="background:#fafafa; padding:20px; border-radius:8px; border:1px solid #f0f0f0; margin-bottom:24px;">
-        <h4 style="margin-top:0;">➕ 添加新员工</h4>
+        <h4 style="margin-top:0;"><i class="ri-user-add-line"></i> 添加新员工</h4>
         <form method="post" style="display:flex; gap:10px; align-items:center;">
             <input type="text" name="new_username" placeholder="登录账号 (如: user08)" required style="width:200px;">
             <input type="text" name="new_realname" placeholder="真实姓名 (如: 王小二)" required style="width:200px;">
@@ -94,11 +94,11 @@ include 'header.php';
                 </td>
                 <td>
                     <button type="button" class="btn btn-ghost btn-sm" style="color:#faad14; border-color:#faad14;" onclick="resetPwd(<?php echo $u['id']; ?>, '<?php echo $u['realname']; ?>')">
-                        🔑 改密
+                        <i class="ri-key-2-line"></i> 改密
                     </button>
                     
                     <?php if($u['role'] != 'admin'): ?>
-                        <a href="?del_user=<?php echo $u['id']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('⚠️ 确定要删除该用户吗？\n删除后该用户的历史报销记录会变成孤儿数据。')">删除</a>
+                        <a href="?del_user=<?php echo $u['id']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('确定要删除该用户吗？\n删除后该用户的历史报销记录会变成孤儿数据。')">删除</a>
                     <?php endif; ?>
                 </td>
             </tr>

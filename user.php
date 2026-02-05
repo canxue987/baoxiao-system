@@ -17,7 +17,7 @@ include 'header.php';
 ?>
 
 <div style="display:flex; justify-content:space-between; align-items:center;">
-    <h2>我的报销</h2>
+    <h2><i class="ri-file-user-line"></i> 我的报销</h2>
 </div>
 
 <?php if($current_batch): ?>
@@ -33,14 +33,14 @@ include 'header.php';
             <div id="sections-container"></div>
             
             <div style="margin-top:24px; padding-top:24px; border-top:1px solid #f0f0f0; text-align:right;">
-                <button type="button" class="btn btn-ghost" onclick="addCompanySection()" style="margin-right:12px;">+ 增加公司主体</button>
-                <button type="submit" class="btn btn-primary" style="padding: 8px 32px; font-size:16px;">提交报销单</button>
+                <button type="button" class="btn btn-ghost" onclick="addCompanySection()" style="margin-right:12px;"><i class="ri-add-line"></i> 增加公司主体</button>
+                <button type="submit" class="btn btn-primary" style="padding: 8px 32px; font-size:16px;"><i class="ri-send-plane-fill"></i> 提交报销单</button>
             </div>
         </form>
     </div>
 
     <div class="card">
-        <h3>已提交记录</h3>
+        <h3><i class="ri-history-line"></i> 已提交记录</h3>
         <table class="data-table">
             <thead>
                 <tr>
@@ -83,11 +83,11 @@ include 'header.php';
                     <td>
                         <?php if($item['status']=='pending'): ?>
                             <span style="color:var(--warning)">审核中</span>
-                            <a href="action.php?action=delete&id=<?php echo $item['id']; ?>" class="btn btn-ghost btn-sm" onclick="return confirm('确定撤回？')">撤回</a>
+                            <a href="action.php?action=delete&id=<?php echo $item['id']; ?>" class="btn btn-ghost btn-sm" onclick="return confirm('确定撤回？')"><i class="ri-arrow-go-back-line"></i> 撤回</a>
                         <?php elseif($item['status']=='rejected'): ?>
                             <div style="color:var(--danger)">已驳回</div>
                             <div style="font-size:11px; color:var(--text-sub);"><?php echo h($item['reject_reason']); ?></div>
-                            <a href="action.php?action=delete&id=<?php echo $item['id']; ?>" style="font-size:12px; text-decoration:underline; color:var(--danger);">删除重填</a>
+                            <a href="action.php?action=delete&id=<?php echo $item['id']; ?>" style="font-size:12px; text-decoration:underline; color:var(--danger);"><i class="ri-delete-bin-line"></i> 删除重填</a>
                         <?php else: ?>
                             <span style="color:var(--success)">已通过</span>
                         <?php endif; ?>

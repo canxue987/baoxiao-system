@@ -182,7 +182,7 @@ function scanInvoiceQR(fileInput, rowId) {
 
                 // 提示文案
                 let targetName = isSub ? "发票面额" : "报销金额";
-                msgBox.innerText = `✅ 已识别${successCount}张, 填入${targetName}: ¥${totalAmount.toFixed(2)}`;
+                msgBox.innerHTML = `<i class="ri-checkbox-circle-line"></i> 已识别${successCount}张, 填入${targetName}: ¥${totalAmount.toFixed(2)}`;
                 msgBox.style.color = "#28a745"; 
             } else {
                 msgBox.innerText = "未识别到二维码";

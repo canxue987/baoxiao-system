@@ -30,7 +30,7 @@ include 'header.php';
 <div class="card" style="margin-bottom:24px;">
     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <div style="flex:1;">
-            <h3>🚀 档期控制</h3>
+            <h3><i class="ri-calendar-check-line"></i> 档期控制</h3>
             <form method="post" style="display:flex; gap:8px; align-items:center;">
                 <input type="text" name="batch_name" placeholder="新档期名称 (如: 2026年3月)" required style="width:240px;">
                 <button type="submit" name="new_batch" value="1" class="btn btn-primary">开启新期</button>
@@ -116,7 +116,7 @@ include 'header.php';
     </div>
 
     <div class="card">
-        <h3>👥 员工申报列表</h3>
+        <h3><i class="ri-team-line"></i> 员工申报列表</h3>
         <?php
             $stmt = $pdo->prepare("SELECT u.id, u.realname, COUNT(*) as cnt, SUM(amount) as total FROM items i LEFT JOIN users u ON i.user_id = u.id WHERE i.batch_id=? AND i.status!='rejected' GROUP BY u.id");
             $stmt->execute([$active_batch_id]);
@@ -131,8 +131,8 @@ include 'header.php';
                     <td><?php echo $u['cnt']; ?> 笔</td>
                     <td style="font-weight:bold;">¥<?php echo number_format($u['total'], 2); ?></td>
                     <td>
-                        <a href="index.php?batch_id=<?php echo $active_batch_id; ?>&view_user=<?php echo $u['id']; ?>" class="btn btn-primary btn-sm">👁 详情 & 审核</a>
-                        <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>" class="btn btn-ghost btn-sm">📦 下载附件</a>
+                        <a href="index.php?batch_id=<?php echo $active_batch_id; ?>&view_user=<?php echo $u['id']; ?>" class="btn btn-primary btn-sm"><i class="ri-file-list-line"></i> 详情 & 审核</a>
+                        <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>" class="btn btn-ghost btn-sm"><i class="ri-download-cloud-2-line"></i> 下载附件</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -154,9 +154,9 @@ include 'header.php';
                     </td>
                     <td>
                         <?php if($b['status']=='open'): ?>
-                            <a href="action.php?close_batch=<?php echo $b['id']; ?>" class="btn btn-ghost btn-sm" onclick="return confirm('关闭后员工将无法再提交，确定吗？')">🔒 关闭</a>
+                            <a href="action.php?close_batch=<?php echo $b['id']; ?>" class="btn btn-ghost btn-sm" onclick="return confirm('关闭后员工将无法再提交，确定吗？')"><i class="ri-lock-2-line"></i> 关闭</a>
                         <?php endif; ?>
-                        <a href="action.php?del_batch=<?php echo $b['id']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('⚠️ 高危操作！\n确定要删除这个档期吗？\n所有图片文件和记录都会被永久删除，无法恢复！')">🗑 删除</a>
+                        <a href="action.php?del_batch=<?php echo $b['id']; ?>" class="btn btn-danger btn-sm" onclick="return confirm('⚠️ 高危操作！\n确定要删除这个档期吗？\n所有图片文件和记录都会被永久删除，无法恢复！')"><i class="ri-delete-bin-line"></i> 删除</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -201,8 +201,8 @@ include 'header.php';
     
     <div class="card" style="margin-bottom:24px;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f0f0f0; padding-bottom:15px; margin-bottom:15px;">
-            <h3>👤 <?php echo h($curr_name); ?> 的报销明细</h3>
-            <a href="index.php?batch_id=<?php echo $active_batch_id; ?>" class="btn btn-ghost">← 返回列表</a>
+            <h3><i class="ri-user-line"></i> <?php echo h($curr_name); ?> 的报销明细</h3>
+            <a href="index.php?batch_id=<?php echo $active_batch_id; ?>" class="btn btn-ghost"><i class="ri-arrow-left-line"></i><i class="ri-arrow-left-line"></i> 返回列表</a>
         </div>
 
         <div style="font-size:16px; margin-bottom:20px;">
@@ -244,7 +244,7 @@ include 'header.php';
 
 <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <h4>原始单据审核</h4>
+            <h4><i class="ri-file-list-line"></i> 原始单据审核</h4>
             <button onclick="approveAll(<?php echo $active_batch_id; ?>, <?php echo $view_user_id; ?>)" class="btn btn-primary" style="background:#52c41a; border-color:#52c41a;">
                 本页一键全部通过
             </button>
@@ -318,7 +318,7 @@ include 'header.php';
         <div class="modal-box" id="modal-box">
             <div class="modal-header" id="modal-header">
                 <span id="modal-title" style="font-weight:bold;">预览</span>
-                <button onclick="closePreview()" class="btn btn-danger btn-sm">✕ 关闭</button>
+                <button onclick="closePreview()" class="btn btn-danger btn-sm"><i class="ri-close-line"></i> 关闭</button>
             </div>
             <div class="modal-body" id="modal-body">
                 </div>

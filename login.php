@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
         
         <?php if($error): ?>
-            <div class="err-msg">⚠️ <?php echo $error; ?></div>
+            <div class="err-msg"><i class="ri-error-warning-line"></i> <?php echo $error; ?></div>
         <?php endif; ?>
 
         <form method="post">

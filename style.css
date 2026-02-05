@@ -38,14 +38,19 @@ body {
 }
 
 .logo-area {
-    height: var(--header-height);
+    /* 删除 height: var(--header-height); 解除高度限制 */
+    padding: 40px 20px;     /* 增加上下呼吸感 */
     display: flex;
-    align-items: center;
+    flex-direction: column; /* 核心：改为垂直排列 */
+    align-items: center;    /* 水平居中 */
     justify-content: center;
-    font-size: 18px;
+    font-size: 16px;        /* 字体稍微改小一点点，显得更精致 */
     font-weight: bold;
     background: #002140;
     letter-spacing: 1px;
+    text-align: center;     /* 文字多行时居中 */
+    gap: 12px;              /* 图片和文字之间的距离 */
+    border-bottom: 1px solid rgba(255,255,255,0.1); /* 加个底部分割线 */
 }
 
 .nav-menu {
