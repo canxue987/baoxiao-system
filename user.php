@@ -57,8 +57,6 @@ include 'header.php';
                 <tr>
                     <td>
                         <span class="tag tag-blue"><?php echo h($item['company']); ?></span>
-                            <?php echo $item['company']; ?>
-                        </span>
                     </td>
                     <td>
                         <div><?php echo $item['expense_date']; ?></div>

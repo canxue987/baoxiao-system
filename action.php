@@ -89,11 +89,27 @@ if ($action == 'add_items' && $_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         // 入库 (注意这里用的是 final_user_id)
-        $stmt = $pdo->prepare("INSERT INTO items (user_id, batch_id, company, category, expense_date, amount, invoice_amount, type, note, is_substitute, invoice_path, support_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $project_name = $item['project_name'] ?? '';
+        $travel_reason = $item['travel_reason'] ?? '';
+        $travelers = $item['travelers'] ?? '';
+        $travel_start = $item['travel_start'] ?? null;
+        $travel_end = $item['travel_end'] ?? null;
+        $travel_days = floatval($item['travel_days'] ?? 0);
+
+        // 入库 (SQL语句加长)
+        $sql = "INSERT INTO items (
+            user_id, batch_id, company, category, expense_date, amount, invoice_amount, 
+            type, note, is_substitute, invoice_path, support_path,
+            project_name, travel_reason, travelers, travel_start, travel_end, travel_days
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+        $stmt = $pdo->prepare($sql);
         $stmt->execute([
             $final_user_id, $batch_id, $company, $item['category'], 
             $item['date'], $amount, $inv_amt, $item['type'], $item['note'], $is_sub, 
-            json_encode($inv_paths), json_encode($sup_paths)
+            json_encode($inv_paths), json_encode($sup_paths),
+            // 新增参数
+            $project_name, $travel_reason, $travelers, $travel_start, $travel_end, $travel_days
         ]);
     }
     

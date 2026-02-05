@@ -16,31 +16,26 @@ if (file_exists($comp_file)) {
 // --- 处理表单提交 ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
-    // A. 处理系统设置 (名称 & Logo)
+    // A. 保存系统设置
     if (isset($_POST['save_settings'])) {
         $new_name = trim($_POST['sys_name']);
         if ($new_name) $sys_config['name'] = $new_name;
 
-        // 处理 Logo 上传
         if (isset($_FILES['sys_logo']) && $_FILES['sys_logo']['error'] == 0) {
             $ext = strtolower(pathinfo($_FILES['sys_logo']['name'], PATHINFO_EXTENSION));
             if (in_array($ext, ['png', 'jpg', 'jpeg', 'gif', 'svg'])) {
-                // 确保 uploads 目录存在
                 if (!is_dir('uploads')) mkdir('uploads', 0777, true);
-                
                 $target = 'uploads/site_logo.' . $ext;
                 if (move_uploaded_file($_FILES['sys_logo']['tmp_name'], $target)) {
-                    $sys_config['logo'] = $target . '?v=' . time(); // 加个时间戳防止浏览器缓存
+                    $sys_config['logo'] = $target . '?v=' . time();
                 }
             }
         }
-        
-        // 保存到 db/settings.json
         file_put_contents($settings_file, json_encode($sys_config, JSON_UNESCAPED_UNICODE));
         header("Location: settings.php"); exit;
     }
 
-    // B. 处理添加公司
+    // B. 添加公司
     if (isset($_POST['add_comp'])) {
         $new_name = trim($_POST['new_name']);
         if ($new_name && !in_array($new_name, $companies)) {
@@ -50,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         header("Location: settings.php"); exit;
     }
     
-    // C. 处理删除公司
+    // C. 删除公司
     if (isset($_POST['del_comp'])) {
         $del_name = $_POST['del_comp'];
         $key = array_search($del_name, $companies);
@@ -61,6 +56,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         header("Location: settings.php"); exit;
     }
+
+    // D. 重命名公司 (新增核心逻辑)
+    if (isset($_POST['rename_comp'])) {
+        $old_name = $_POST['old_name'];
+        $new_name = trim($_POST['new_name']);
+        
+        if ($old_name && $new_name && $old_name !== $new_name) {
+            // 1. 更新 JSON 列表
+            $key = array_search($old_name, $companies);
+            if ($key !== false) {
+                $companies[$key] = $new_name;
+                file_put_contents($comp_file, json_encode($companies, JSON_UNESCAPED_UNICODE));
+            }
+
+            // 2. 更新数据库中的历史记录 (保持统计数据连续性)
+            // 注意：我们只更新 items 表里的 company 字段，不重命名 uploads 里的物理文件夹
+            // 这样能确保发票路径(invoice_path)依然有效，不会因为文件夹改名而找不到图片
+            $stmt = $pdo->prepare("UPDATE items SET company = ? WHERE company = ?");
+            $stmt->execute([$new_name, $old_name]);
+            
+            echo "<script>alert('更名成功！\\n历史报销记录已同步更新为新名称。\\n(注: 为了系统安全，物理存档文件夹名称未变更)'); window.location.href='settings.php';</script>"; exit;
+        }
+    }
 }
 
 include 'header.php';
@@ -68,7 +86,6 @@ include 'header.php';
 
 <div class="card" style="margin-bottom:24px;">
     <h3><i class="ri-settings-3-line"></i> 系统基本设置</h3>
-    
     <form method="post" enctype="multipart/form-data" style="background:#fafafa; padding:20px; border-radius:8px;">
         <div style="margin-bottom:15px;">
             <label style="display:block; margin-bottom:5px; font-weight:bold;">系统名称</label>
@@ -91,9 +108,14 @@ include 'header.php';
 </div>
 
 <div class="card">
+    <div style="background:#fff7e6; border:1px solid #ffd591; padding:15px; border-radius:6px; margin-bottom:24px; color:#d48806; font-size:13px;">
+        <i class="ri-error-warning-line"></i> <strong>关于更名：</strong> 
+        修改公司名称后，历史报销记录中的公司名会自动更新，统计报表将合并计算。
+        <br>
+        <span style="opacity:0.8">* 为防止图片丢失，服务器上的物理文件夹名称不会更改，这不影响正常使用。</span>
+    </div>
 
-
-    <h4>公司主体管理</h4>
+    <h4>🏢 公司主体管理</h4>
     
     <div style="margin-bottom:20px;">
         <?php if(empty($companies)): ?>
@@ -102,10 +124,15 @@ include 'header.php';
             <div style="display:flex; flex-wrap:wrap; gap:10px;">
                 <?php foreach($companies as $c): ?>
                     <div style="background:#f0f2f5; padding:8px 16px; border-radius:20px; border:1px solid #d9d9d9; display:flex; align-items:center; gap:8px;">
-                        <span style="font-weight:bold;"><?php echo h($c); ?></span>
+                        <span style="font-weight:bold; color:#333;"><?php echo h($c); ?></span>
+                        
+                        <button type="button" onclick="renameComp('<?php echo h($c); ?>')" style="background:none; border:none; color:#1677ff; cursor:pointer; padding:0 5px;" title="重命名">
+                            <i class="ri-edit-line"></i>
+                        </button>
+                        
                         <form method="post" style="display:inline;">
                             <input type="hidden" name="del_comp" value="<?php echo h($c); ?>">
-                            <button type="submit" style="background:none; border:none; color:#ff4d4f; cursor:pointer; font-size:16px; padding:0;" onclick="return confirm('确定从下拉选项中移除吗？')">
+                            <button type="submit" style="background:none; border:none; color:#ff4d4f; cursor:pointer; padding:0 0 0 5px;" onclick="return confirm('确定从下拉选项中移除吗？')">
                                 <i class="ri-close-circle-fill"></i>
                             </button>
                         </form>
@@ -120,6 +147,23 @@ include 'header.php';
         <button type="submit" name="add_comp" value="1" class="btn btn-primary"><i class="ri-add-line"></i> 添加主体</button>
     </form>
 </div>
+
+<form id="rename-form" method="post" style="display:none;">
+    <input type="hidden" name="rename_comp" value="1">
+    <input type="hidden" name="old_name" id="old_name_input">
+    <input type="hidden" name="new_name" id="new_name_input">
+</form>
+
+<script>
+function renameComp(oldName) {
+    let newName = prompt("请输入 [" + oldName + "] 的新名称:", oldName);
+    if (newName && newName !== oldName) {
+        document.getElementById('old_name_input').value = oldName;
+        document.getElementById('new_name_input').value = newName;
+        document.getElementById('rename-form').submit();
+    }
+}
+</script>
 
 </body>
 </html>

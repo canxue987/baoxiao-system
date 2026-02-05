@@ -51,6 +51,19 @@ try {
     if (!in_array('company', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN company TEXT DEFAULT '海科科技'");
     if (!in_array('category', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN category TEXT DEFAULT '费用报销'");
     
+    // V2.0 新增字段
+    if (!in_array('project_name', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN project_name TEXT DEFAULT ''");
+    if (!in_array('travel_reason', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travel_reason TEXT DEFAULT ''");
+    if (!in_array('travelers', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travelers TEXT DEFAULT ''");
+    if (!in_array('travel_start', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travel_start DATE");
+    if (!in_array('travel_end', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travel_end DATE");
+    if (!in_array('travel_days', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travel_days REAL DEFAULT 0");
+
+    // 用户表升级
+    $u_cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('department', $u_cols)) $pdo->exec("ALTER TABLE users ADD COLUMN department TEXT DEFAULT ''");
+    if (!in_array('bank_account', $u_cols)) $pdo->exec("ALTER TABLE users ADD COLUMN bank_account TEXT DEFAULT ''");
+    
     // 初始化用户
     $stmt = $pdo->query("SELECT count(*) FROM users WHERE username='admin'");
     if ($stmt->fetchColumn() == 0) {
