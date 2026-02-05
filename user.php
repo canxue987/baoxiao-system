@@ -56,7 +56,7 @@ include 'header.php';
                 <?php foreach($my_items as $item): ?>
                 <tr>
                     <td>
-                        <span class="tag <?php echo $item['company']=='海科科技'?'tag-blue':'tag-green'; ?>">
+                        <span class="tag tag-blue"><?php echo $item['company']; ?></span>
                             <?php echo $item['company']; ?>
                         </span>
                     </td>

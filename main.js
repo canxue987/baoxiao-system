@@ -8,27 +8,38 @@ const typeData = {
 let globalRowId = 0;
 
 // --- 1. 增加公司区块 ---
+// --- 1. 增加公司区块 (动态读取配置版) ---
 function addCompanySection() {
     const sectionId = Date.now();
     const container = document.getElementById('sections-container');
     if(!container) return;
 
+    // 动态生成下拉选项
+    let optionsHtml = '';
+    // GLOBAL_COMPANIES 来自 header.php 的注入
+    if (typeof GLOBAL_COMPANIES !== 'undefined' && GLOBAL_COMPANIES.length > 0) {
+        GLOBAL_COMPANIES.forEach(comp => {
+            optionsHtml += `<option value="${comp}">${comp}</option>`;
+        });
+    } else {
+        optionsHtml = '<option value="默认公司">默认公司</option>';
+    }
+
     const html = `
     <div class="company-section" id="section-${sectionId}">
         <div class="company-header">
             <div style="display:flex; align-items:center; gap:10px;">
-                <strong>🏢 报销主体</strong>
+                <strong><i class="ri-building-2-line"></i> 报销主体</strong>
                 <select id="comp-select-${sectionId}" class="form-select" style="width:200px;">
-                    <option value="海科科技">海科科技</option>
-                    <option value="鹏鹏科技">鹏鹏科技</option>
+                    ${optionsHtml}
                 </select>
             </div>
-            <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('section-${sectionId}').remove()">删除此公司栏</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('section-${sectionId}').remove()"><i class="ri-delete-bin-line"></i> 删除此公司栏</button>
         </div>
         <div class="company-body" id="body-${sectionId}">
             </div>
         <div style="padding: 12px 24px; background: #fafafa; border-top: 1px solid #f0f0f0;">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="addRow('${sectionId}')">➕ 增加明细行</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addRow('${sectionId}')"><i class="ri-add-line"></i> 增加明细行</button>
         </div>
     </div>`;
     

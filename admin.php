@@ -263,7 +263,7 @@ include 'header.php';
                     $sups = json_decode($item['support_path'] ?: '[]');
                 ?>
                 <tr style="<?php if($item['status']=='rejected') echo 'background:#fff1f0; opacity:0.6;'; elseif($item['status']=='approved') echo 'background:#f6ffed;'; ?>">
-                    <td><span class="tag <?php echo $item['company']=='海科科技'?'tag-blue':'tag-green'; ?>"><?php echo $item['company']; ?></span></td>
+                    <td><span class="tag tag-blue"><?php echo $item['company']; ?>"><?php echo $item['company']; ?></span></td>
                     <td>
                         <div><?php echo $item['expense_date']; ?></div>
                         <div style="font-size:12px; color:var(--text-sub);"><?php echo $item['category']; ?> - <?php echo $item['type']; ?></div>
