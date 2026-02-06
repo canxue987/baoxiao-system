@@ -6,12 +6,14 @@ if (isset($_POST['new_batch'])) {
     $name = $_POST['batch_name'];
     $pdo->prepare("UPDATE batches SET status='closed' WHERE status='open'")->execute(); 
     $pdo->prepare("INSERT INTO batches (name, status) VALUES (?, 'open')")->execute([$name]);
-    header("Location: index.php"); exit;
+    header("Location: admin.php"); exit;
 }
 
 // --- 数据准备 ---
 $batches = $pdo->query("SELECT * FROM batches ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
+// 默认选中最新一个档期
 $active_batch_id = isset($_GET['batch_id']) ? $_GET['batch_id'] : ($batches[0]['id'] ?? 0);
+// 当前查看的员工ID (如果有)
 $view_user_id = $_GET['view_user'] ?? null;
 
 // --- 辅助函数：获取数据 ---
@@ -27,33 +29,26 @@ function getBatchData($pdo, $batch_id, $uid = null) {
 include 'header.php';
 ?>
 
-<div class="card" style="margin-bottom:24px;">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-        <div style="flex:1;">
-            <h3><i class="ri-calendar-check-line"></i> 档期控制</h3>
-            <form method="post" style="display:flex; gap:8px; align-items:center;">
-                <input type="text" name="batch_name" placeholder="新档期名称 (如: 2026年3月)" required style="width:240px;">
-                <button type="submit" name="new_batch" value="1" class="btn btn-primary">开启新期</button>
-            </form>
-            <div style="font-size:12px; color:var(--text-sub); margin-top:8px;">* 开启新档期会自动关闭旧档期</div>
-        </div>
-        
-        <div style="display:flex; align-items:center; gap:10px;">
-            <span>当前查看：</span>
-            <select onchange="location.href='index.php?batch_id='+this.value" style="width:auto; padding:6px;">
-                <?php foreach($batches as $b): ?>
-                    <option value="<?php echo $b['id']; ?>" <?php if($b['id']==$active_batch_id) echo 'selected'; ?>>
-                        <?php echo h($b['name']); ?>(<?php echo $b['status']=='open'?'开启':'关闭'; ?>)
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-    </div>
+<div class="batch-tabs" style="margin-bottom: 20px; overflow-x: auto; white-space: nowrap; padding-bottom: 5px;">
+    <?php foreach ($batches as $b): ?>
+        <a href="?batch_id=<?php echo $b['id']; ?>" class="batch-tab <?php echo $active_batch_id == $b['id'] ? 'active' : ''; ?>">
+            <?php if($b['status']=='open'): ?>
+                <span style="color:#52c41a;">●</span>
+            <?php else: ?>
+                <span style="color:#999;">●</span>
+            <?php endif; ?>
+            <?php echo h($b['name']); ?>
+        </a>
+    <?php endforeach; ?>
+    
+    <button onclick="document.getElementById('newBatchModal').style.display='block'" class="batch-tab" style="background:#f0f2f5; color:#1890ff; border:1px dashed #1890ff;">
+        + 新建档期
+    </button>
 </div>
 
 <?php if (!$view_user_id): ?>
-    
     <?php
+        // 统计逻辑
         $all_items = getBatchData($pdo, $active_batch_id);
         $total_reimburse = 0; 
         $total_invoice = 0;   
@@ -75,23 +70,6 @@ include 'header.php';
             $comp_stats[$c]['types'][$t]['sheets'] += $sheet_count;
         }
     ?>
-
-    <div class="card" style="margin-bottom:24px; background:#f9f9f9; border:1px dashed #d9d9d9;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <strong style="font-size:16px; margin-right:10px;"><i class="ri-file-excel-2-line"></i> 批量操作</strong>
-                <span style="color:#666; font-size:13px;">当前档期：<?php echo h($batches[array_search($active_batch_id, array_column($batches, 'id'))]['name']); ?></span>
-            </div>
-            <div style="display:flex; gap:10px;">
-                <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&type=csv" target="_blank" class="btn btn-primary" style="background:#217346; border-color:#217346;">
-                    <i class="ri-file-excel-2-line"></i> 导出全员明细表 (Excel)
-                </a>
-                <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&type=zip" target="_blank" class="btn btn-primary" style="background:#0050b3; border-color:#0050b3;">
-                    <i class="ri-folder-zip-line"></i> 打包全员附件 (Zip)
-                </a>
-            </div>
-        </div>
-    </div>
 
     <div class="stat-grid" style="margin-bottom:24px;">
         <div class="stat-item">
@@ -134,48 +112,53 @@ include 'header.php';
     </div>
 
     <div class="card">
-        <h3><i class="ri-team-line"></i> 员工申报列表</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h3 style="margin:0;"><i class="ri-team-line"></i> 员工申报列表</h3>
+            
+            <a href="export_list.php?batch_id=<?php echo $active_batch_id; ?>" target="_blank" class="btn btn-success btn-sm" style="display:flex; align-items:center; gap:5px; padding: 6px 12px; font-weight: 500;">
+                <i class="ri-file-excel-2-line"></i> 导出财务明细总表
+            </a>
+        </div>
+
         <?php
             $stmt = $pdo->prepare("SELECT u.id, u.realname, COUNT(*) as cnt, SUM(amount) as total FROM items i LEFT JOIN users u ON i.user_id = u.id WHERE i.batch_id=? AND i.status!='rejected' GROUP BY u.id");
             $stmt->execute([$active_batch_id]);
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         ?>
         <table class="data-table">
-            <thead><tr><th>姓名</th><th>申报笔数</th><th>申报总额</th><th>操作</th></tr></thead>
+            <thead><tr><th>姓名</th><th>申报笔数</th><th>申报总额</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
                 <?php foreach($users as $u): ?>
                 <tr>
                     <td><?php echo h($u['realname']); ?></td>
                     <td><?php echo $u['cnt']; ?> 笔</td>
-                    <td style="font-weight:bold;">¥<?php echo number_format($u['total'], 2); ?></td>
+                    <td style="font-weight:bold; color:#1890ff;">¥<?php echo number_format($u['total'], 2); ?></td>
+                    <td><span class="tag" style="background:#e6f7ff; color:#1890ff;">审核中</span></td>
                     <td>
-                        <div style="display:flex; gap:5px;">
-                            <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=csv" class="btn btn-ghost btn-sm" style="color:#217346; border-color:#b7eb8f;" title="导出Excel">
-                                <i class="ri-file-excel-2-line"></i>
-                            </a>
-                            <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=zip" class="btn btn-ghost btn-sm" title="下载附件包">
-                                <i class="ri-folder-zip-line"></i>
-                            </a>
-                            <a href="index.php?batch_id=<?php echo $active_batch_id; ?>&view_user=<?php echo $u['id']; ?>" class="btn btn-primary btn-sm">
-                                <i class="ri-eye-line"></i> 详情
-                            </a>
-                        </div>
-
-                        <div style="margin-top:5px; display:flex; flex-direction:column; gap:5px;">
-                            <div class="btn-group" style="display:flex; gap:2px;">
-                                <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" class="btn btn-ghost btn-sm" title="导出费用报销单(Word)" style="flex:1; text-align:center; border:1px solid #e8e8e8;">
-                                    <i class="ri-file-word-2-line" style="color:#1890ff;"></i> 费
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <div style="display:flex; gap:5px;">
+                                <a href="admin.php?batch_id=<?php echo $active_batch_id; ?>&view_user=<?php echo $u['id']; ?>" class="btn btn-primary btn-sm" style="flex:1; text-align:center;">
+                                    <i class="ri-eye-line"></i> 审核详情
                                 </a>
-                                <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" class="btn btn-ghost btn-sm" title="导出差旅报销单(Word)" style="flex:1; text-align:center; border:1px solid #e8e8e8;">
-                                    <i class="ri-file-word-2-line" style="color:#1890ff;"></i> 差
+                                <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=zip" class="btn btn-ghost btn-sm" title="下载附件包">
+                                    <i class="ri-folder-zip-line"></i>
                                 </a>
                             </div>
 
                             <div class="btn-group" style="display:flex; gap:2px;">
-                                <a href="print.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" target="_blank" class="btn btn-ghost btn-sm" title="图片打印：费用单" style="flex:1; text-align:center; font-size:12px; color:#666;">
+                                <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" class="btn btn-ghost btn-sm" title="导出费用报销单(Word)" style="flex:1; text-align:center; border:1px solid #e8e8e8; color:#1890ff;">
+                                    <i class="ri-file-word-2-line"></i> 费
+                                </a>
+                                <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" class="btn btn-ghost btn-sm" title="导出差旅报销单(Word)" style="flex:1; text-align:center; border:1px solid #e8e8e8; color:#1890ff;">
+                                    <i class="ri-file-word-2-line"></i> 差
+                                </a>
+                            </div>
+
+                            <div class="btn-group" style="display:flex; gap:2px;">
+                                <a href="print.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" target="_blank" class="btn btn-ghost btn-sm" title="图片打印：费用单" style="flex:1; text-align:center; font-size:12px; color:#999; border:1px solid #f0f0f0;">
                                     <i class="ri-printer-line"></i> 费图
                                 </a>
-                                <a href="print.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" target="_blank" class="btn btn-ghost btn-sm" title="图片打印：差旅单" style="flex:1; text-align:center; font-size:12px; color:#666;">
+                                <a href="print.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" target="_blank" class="btn btn-ghost btn-sm" title="图片打印：差旅单" style="flex:1; text-align:center; font-size:12px; color:#999; border:1px solid #f0f0f0;">
                                     <i class="ri-printer-line"></i> 差图
                                 </a>
                             </div>
@@ -183,6 +166,9 @@ include 'header.php';
                     </td>
                 </tr>
                 <?php endforeach; ?>
+                <?php if(empty($users)): ?>
+                    <tr><td colspan="5" style="text-align:center; padding:30px; color:#999;">本期暂无申报数据</td></tr>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -212,7 +198,6 @@ include 'header.php';
     </div>
 
 <?php else: ?>
-    
     <?php
         // 获取该员工数据
         $user_items = getBatchData($pdo, $active_batch_id, $view_user_id);
@@ -250,7 +235,7 @@ include 'header.php';
     <div class="card" style="margin-bottom:24px;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f0f0f0; padding-bottom:15px; margin-bottom:15px;">
             <h3><i class="ri-user-star-line"></i> <?php echo h($curr_name); ?> 的报销明细</h3>
-            <a href="index.php?batch_id=<?php echo $active_batch_id; ?>" class="btn btn-ghost"><i class="ri-arrow-left-line"></i> 返回列表</a>
+            <a href="admin.php?batch_id=<?php echo $active_batch_id; ?>" class="btn btn-ghost"><i class="ri-arrow-left-line"></i> 返回列表</a>
         </div>
 
         <div style="font-size:16px; margin-bottom:20px;">
@@ -293,10 +278,7 @@ include 'header.php';
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <h4><i class="ri-file-search-line"></i> 原始单据审核</h4>
-            <button onclick="approveAll(<?php echo $active_batch_id; ?>, <?php echo $view_user_id; ?>)" class="btn btn-primary" style="background:#52c41a; border-color:#52c41a;">
-                本页一键全部通过
-            </button>
-        </div>
+            </div>
 
         <table class="data-table">
             <thead><tr><th>公司</th><th>详情</th><th>金额(报/票)</th><th>备注</th><th>附件</th><th>操作</th></tr></thead>
@@ -395,8 +377,7 @@ include 'header.php';
                 <span id="modal-title" style="font-weight:bold;">预览</span>
                 <button onclick="closePreview()" class="btn btn-danger btn-sm"><i class="ri-close-line"></i> 关闭</button>
             </div>
-            <div class="modal-body" id="modal-body">
-            </div>
+            <div class="modal-body" id="modal-body"></div>
         </div>
     </div>
 
@@ -406,43 +387,57 @@ include 'header.php';
         if(r) location.href = "action.php?action=audit&id="+id+"&uid="+uid+"&status=rejected&reason="+encodeURIComponent(r);
     }
 
-    // 新增：详情弹窗逻辑
+    // 显示详情弹窗
     function showMeta(data) {
-            const modal = document.getElementById('preview-modal');
-            const body = document.getElementById('modal-body');
-            const title = document.getElementById('modal-title');
-            
-            // --- 核心修改：强制改为文档阅读模式 (白底、可滚动) ---
-            body.style.background = '#fff';      // 白底
-            body.style.overflow = 'auto';        // 允许滚动 (防止内容太长看不见)
-            body.style.display = 'block';        // 普通块级布局 (防止Flex居中切掉头部)
-            body.style.padding = '20px';         // 加点内边距
-            // ------------------------------------------------
-            
-            title.innerHTML = "<i class='ri-file-info-line'></i> 单据详细信息";
-            
-            let html = '<table class="data-table" style="width:100%; border-collapse: collapse;">';
-            for (const key in data) {
-                html += `
-                    <tr style="border-bottom: 1px solid #f0f0f0;">
-                        <td style="width:100px; color:#666; font-weight:bold; background:#fafafa; padding:12px 10px;">${key}</td>
-                        <td style="padding:12px 10px; color:#333;">${data[key]}</td>
-                    </tr>
-                `;
-            }
-            html += '</table>';
-            
-            body.innerHTML = html;
-            modal.style.display = 'flex';
-            
-            const box = document.getElementById('modal-box');
-            box.style.width = '600px';   // 稍微宽一点
-            box.style.height = 'auto';
-            box.style.minHeight = '300px';
-            box.style.maxHeight = '80%'; // 防止太高超出屏幕
+        const modal = document.getElementById('preview-modal');
+        const body = document.getElementById('modal-body');
+        const title = document.getElementById('modal-title');
+        
+        // 样式重置为文档模式
+        body.style.background = '#fff';      
+        body.style.overflow = 'auto';        
+        body.style.display = 'block';        
+        body.style.padding = '20px';         
+        
+        title.innerHTML = "<i class='ri-file-info-line'></i> 单据详细信息";
+        
+        let html = '<table class="data-table" style="width:100%; border-collapse: collapse;">';
+        for (const key in data) {
+            html += `
+                <tr style="border-bottom: 1px solid #f0f0f0;">
+                    <td style="width:100px; color:#666; font-weight:bold; background:#fafafa; padding:12px 10px;">${key}</td>
+                    <td style="padding:12px 10px; color:#333;">${data[key]}</td>
+                </tr>
+            `;
         }
+        html += '</table>';
+        
+        body.innerHTML = html;
+        modal.style.display = 'flex';
+        
+        const box = document.getElementById('modal-box');
+        box.style.width = '600px';
+        box.style.height = 'auto';
+        box.style.minHeight = '300px';
+        box.style.maxHeight = '80%';
+    }
     </script>
+
 <?php endif; ?>
+
+<div id="newBatchModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100;">
+    <div style="background:#fff; width:300px; margin:100px auto; padding:20px; border-radius:8px;">
+        <h3>新建报销档期</h3>
+        <p style="color:#666; font-size:12px;">新建后，旧档期将自动关闭，所有员工将开始在新的档期下申报。</p>
+        <form method="post">
+            <input type="text" name="batch_name" required placeholder="如：2026年3月报销" class="form-control" style="width:100%; margin-bottom:15px;">
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" onclick="document.getElementById('newBatchModal').style.display='none'" class="btn btn-secondary">取消</button>
+                <button type="submit" name="new_batch" value="1" class="btn btn-primary">确认新建</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <script src="main.js?v=<?php echo time(); ?>"></script>
 </body>
