@@ -91,7 +91,67 @@ if (file_exists($settings_file)) {
     }
 }
 
+// --- 新增：打印模板表 ---
+    $pdo->exec("CREATE TABLE IF NOT EXISTS print_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,              -- 模板名称
+        type TEXT,              -- 适用类型 (费用报销单 / 差旅费报销单)
+        bg_image TEXT,          -- 背景图路径
+        config_json TEXT,       -- 坐标配置
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+// --- 自动升级字段 (print_templates 表补丁) ---
+    $pt_cols = $pdo->query("PRAGMA table_info(print_templates)")->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('is_default', $pt_cols)) {
+        $pdo->exec("ALTER TABLE print_templates ADD COLUMN is_default INTEGER DEFAULT 0");
+    }
+    if (!in_array('calibration_scale', $pt_cols)) {
+        // 默认值为 1.0
+        $pdo->exec("ALTER TABLE print_templates ADD COLUMN calibration_scale REAL DEFAULT 1.0");
+    }
 function h($str) {
     return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
 }
+
+// --- 新增：数字转中文大写 (财务专用) ---
+function num2rmb($number) {
+    $c1 = "零壹贰叁肆伍陆柒捌玖";
+    $c2 = "分角元拾佰仟万拾佰仟亿";
+    $num = round($number, 2);
+    $num = $num * 100;
+    if (strlen($num) > 10) return "金额过大";
+    $i = 0; $c = "";
+    while (1) {
+        if ($i == 0) { $n = substr($num, strlen($num)-1, 1); } 
+        else { $n = $num % 10; }
+        $p1 = substr($c1, 3 * $n, 3);
+        $p2 = substr($c2, 3 * $i, 3);
+        if ($n != '0' || ($n == '0' && ($p2 == '亿' || $p2 == '万' || $p2 == '元'))) {
+            $c = $p1 . $p2 . $c;
+        } else {
+            $c = $p1 . $c;
+        }
+        $i = $i + 1;
+        $num = $num / 10;
+        $num = (int)$num;
+        if ($num == 0) break;
+    }
+    $j = 0; $slen = strlen($c);
+    while ($j < $slen) {
+        $m = substr($c, $j, 6);
+        if ($m == '零元' || $m == '零万' || $m == '零亿' || $m == '零零') {
+            $left = substr($c, 0, $j);
+            $right = substr($c, $j + 3);
+            $c = $left . $right;
+            $j = $j - 3; $slen = $slen - 3;
+        }
+        $j = $j + 3;
+    }
+    if (substr($c, strlen($c)-3, 3) == '零') {
+        $c = substr($c, 0, strlen($c)-3);
+    }
+    if (empty($c)) return "零元整";
+    return $c . "整";
+}
+
 ?>

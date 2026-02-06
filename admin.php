@@ -160,6 +160,15 @@ include 'header.php';
                                 <i class="ri-eye-line"></i> 详情
                             </a>
                         </div>
+
+                        <div style="margin-top:5px; display:flex; gap:5px;">
+                            <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" class="btn btn-ghost btn-sm" style="color:#1890ff;">
+                                <i class="ri-file-word-2-line"></i> 费(Word)
+                            </a>
+                            <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" class="btn btn-ghost btn-sm" style="color:#1890ff;">
+                                <i class="ri-file-word-2-line"></i> 差(Word)
+                            </a>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
