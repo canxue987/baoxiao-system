@@ -8,15 +8,12 @@ const typeData = {
 let globalRowId = 0;
 
 // --- 1. 增加公司区块 ---
-// --- 1. 增加公司区块 (动态读取配置版) ---
 function addCompanySection() {
     const sectionId = Date.now();
     const container = document.getElementById('sections-container');
     if(!container) return;
 
-    // 动态生成下拉选项
     let optionsHtml = '';
-    // GLOBAL_COMPANIES 来自 header.php 的注入
     if (typeof GLOBAL_COMPANIES !== 'undefined' && GLOBAL_COMPANIES.length > 0) {
         GLOBAL_COMPANIES.forEach(comp => {
             optionsHtml += `<option value="${comp}">${comp}</option>`;
@@ -47,12 +44,11 @@ function addCompanySection() {
     addRow(sectionId);
 }
 
-// --- 2. 增加明细行 ---
+// --- 2. 增加明细行 (布局重构) ---
 function addRow(sectionId) {
     const compSelect = document.getElementById(`comp-select-${sectionId}`);
     const companyName = compSelect.value;
     
-    // 监听公司变化
     compSelect.addEventListener('change', function() {
         const inputs = document.querySelectorAll(`.comp-input-${sectionId}`);
         inputs.forEach(i => i.value = this.value);
@@ -61,101 +57,98 @@ function addRow(sectionId) {
     const today = new Date().toISOString().split('T')[0];
     
     const rowHtml = `
-    <div class="row-input" id="row-${globalRowId}" style="flex-wrap:wrap;">
+    <div class="row-input" id="row-${globalRowId}" style="display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; padding:12px 0; border-bottom:1px dashed #eee;">
         <input type="hidden" name="items[${globalRowId}][company]" value="${companyName}" class="comp-input-${sectionId}">
         
-        <div style="display:flex; gap:10px; width:100%; margin-bottom:10px;">
-            <div class="input-group" style="flex: 0 0 130px;">
-                <span class="input-label">消费/票据日期</span>
-                <input type="date" name="items[${globalRowId}][date]" id="date-${globalRowId}" required value="${today}">
-            </div>
-            
-            <div class="input-group" style="flex: 0 0 110px;">
-                <span class="input-label">报销金额</span>
-                <input type="text" name="items[${globalRowId}][amount]" id="amt-${globalRowId}" required placeholder="0.00" onblur="calc(this)">
-            </div>
-
-            <div class="input-group" style="flex: 0 0 50px; align-items:center;">
-                <span class="input-label">替票</span>
-                <input type="checkbox" onchange="toggleInv(${globalRowId})" id="chk-${globalRowId}" name="items[${globalRowId}][is_sub]" value="1">
-            </div>
-            
-            <div class="input-group" id="inv-box-${globalRowId}" style="display:none; flex: 0 0 90px;">
-                <span class="input-label" style="color:var(--warning)">发票面额</span>
-                <input type="text" name="items[${globalRowId}][inv_amt]" id="inv-amt-${globalRowId}" onblur="calc(this)">
-            </div>
-            
-            <div class="input-group" style="flex: 0 0 130px;">
-                <span class="input-label">报销大类</span>
-                <select name="items[${globalRowId}][category]" id="cat-${globalRowId}" onchange="onCategoryChange(${globalRowId}, this.value)">
-                    <option value="费用报销单">费用报销单</option>
-                    <option value="差旅费报销单">差旅费报销单</option>
-                </select>
-            </div>
-            
-            <div class="input-group" style="flex: 0 0 120px;">
-                <span class="input-label">费用项目</span>
-                <select name="items[${globalRowId}][type]" id="subtype-${globalRowId}"></select>
-            </div>
-
-            <div class="input-group" style="flex: 1;">
-                <span class="input-label">所属项目 (必填)</span>
-                <input type="text" name="items[${globalRowId}][project_name]" placeholder="如: 百度AIGC项目" required>
-            </div>
+        <div class="input-group" style="width: 135px; flex:none;">
+            <span class="input-label">日期</span>
+            <input type="date" name="items[${globalRowId}][date]" id="date-${globalRowId}" required value="${today}" style="height:32px;">
+        </div>
+        
+        <div class="input-group" style="width: 150px; flex:none;">
+            <span class="input-label">金额</span>
+            <input type="text" name="items[${globalRowId}][amount]" id="amt-${globalRowId}" required placeholder="0.00" onblur="calc(this)" style="height:32px;">
         </div>
 
-        <div id="travel-area-${globalRowId}" style="display:none; width:100%; background:#f0f7ff; padding:10px; border-radius:6px; margin-bottom:10px; border:1px dashed #adc6ff;">
+        <div class="input-group" style="width: 28px; text-align:center; flex:none;">
+            <span class="input-label" style="display:block; width:100%;">替票</span>
+            <input type="checkbox" onchange="toggleInv(${globalRowId})" id="chk-${globalRowId}" name="items[${globalRowId}][is_sub]" value="1" style="width:18px; height:18px; cursor:pointer; margin-bottom:7px;">
+        </div>
+        
+        <div class="input-group" id="inv-box-${globalRowId}" style="display:none; width: 150px; flex:none;">
+            <span class="input-label" style="color:var(--warning)">票面金额</span>
+            <input type="text" name="items[${globalRowId}][inv_amt]" id="inv-amt-${globalRowId}" onblur="calc(this)" style="height:32px;">
+        </div>
+        
+        <div class="input-group" style="width: 150px; flex:none;">
+            <span class="input-label">报销大类</span>
+            <select name="items[${globalRowId}][category]" id="cat-${globalRowId}" onchange="onCategoryChange(${globalRowId}, this.value)" style="height:32px;">
+                <option value="费用报销单">费用报销单</option>
+                <option value="差旅费报销单">差旅费报销单</option>
+            </select>
+        </div>
+        
+        <div class="input-group" style="width: 100px; flex:none;">
+            <span class="input-label">费用项目</span>
+            <select name="items[${globalRowId}][type]" id="subtype-${globalRowId}" style="height:32px;"></select>
+        </div>
+
+        <div class="input-group" style="width: 130px; flex:none;">
+            <span class="input-label">所属项目</span>
+            <input type="text" name="items[${globalRowId}][project_name]" placeholder="必填" required style="height:32px;">
+        </div>
+
+        <div class="input-group" style="flex: 1; min-width: 150px;">
+            <span class="input-label">备注说明</span>
+            <input type="text" name="items[${globalRowId}][note]" placeholder="事由" required style="height:32px;">
+        </div>
+
+        <div class="input-group" style="width: 200px; position:relative; flex:none;">
+             <span class="input-label" style="color:#1677ff">发票</span>
+             <input type="file" name="invoice_${globalRowId}[]" multiple accept="image/*,.pdf" onchange="scanInvoiceQR(this, ${globalRowId})" style="font-size:11px; height:32px; padding-top:3px;">
+             <div id="scan-msg-${globalRowId}" style="font-size:10px; color:#999; position:absolute; bottom:-16px; left:0; white-space:nowrap;"></div>
+        </div>
+        
+        <div class="input-group" style="width: 150px; flex:none;">
+             <span class="input-label">辅证</span>
+             <input type="file" name="support_${globalRowId}[]" multiple accept="image/*,.pdf" style="font-size:11px; height:32px; padding-top:3px;">
+        </div>
+        
+        <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('row-${globalRowId}').remove()" style="height:32px; padding:0 10px; margin-bottom:0; flex:none;">
+            <i class="ri-close-line"></i>
+        </button>
+
+        <div id="travel-group-${globalRowId}" style="display:none; width:100%; background:#f0f7ff; padding:8px; border-radius:4px; margin-top:8px; border:1px dashed #adc6ff;">
             <div style="display:flex; gap:10px; align-items:center;">
-                <div style="font-weight:bold; color:#0050b3; font-size:12px;"><i class="ri-plane-line"></i> 差旅详情:</div>
+                <div style="font-weight:bold; color:#0050b3; font-size:12px; white-space:nowrap;"><i class="ri-plane-line"></i> 差旅详情:</div>
                 
-                <div class="input-group" style="flex: 1;">
-                    <span class="input-label">出差事由</span>
-                    <input type="text" name="items[${globalRowId}][travel_reason]" placeholder="如: 北京参加行业峰会">
+                <div class="input-group" style="flex:1;">
+                    <span class="input-label" style="color:#0050b3">出差事由</span>
+                    <input type="text" name="items[${globalRowId}][travel_reason]" placeholder="如: 北京峰会" style="height:32px;">
                 </div>
                 
-                <div class="input-group" style="flex: 0 0 120px;">
-                    <span class="input-label">出差人员</span>
-                    <input type="text" name="items[${globalRowId}][travelers]" placeholder="张三,李四">
+                <div class="input-group" style="width: 100px;">
+                    <span class="input-label" style="color:#0050b3">同行人员</span>
+                    <input type="text" name="items[${globalRowId}][travelers]" placeholder="姓名" style="height:32px;">
                 </div>
 
-                <div class="input-group" style="flex: 0 0 130px;">
-                    <span class="input-label">开始日期</span>
-                    <input type="date" name="items[${globalRowId}][travel_start]" id="t-start-${globalRowId}" onchange="calcDays(${globalRowId})">
+                <div class="input-group" style="width: 120px;">
+                    <span class="input-label" style="color:#0050b3">开始日期</span>
+                    <input type="date" name="items[${globalRowId}][travel_start]" id="t-start-${globalRowId}" onchange="calcDays(${globalRowId})" style="height:32px;">
                 </div>
                 
-                <div class="input-group" style="flex: 0 0 130px;">
-                    <span class="input-label">结束日期</span>
-                    <input type="date" name="items[${globalRowId}][travel_end]" id="t-end-${globalRowId}" onchange="calcDays(${globalRowId})">
+                <div class="input-group" style="width: 120px;">
+                    <span class="input-label" style="color:#0050b3">结束日期</span>
+                    <input type="date" name="items[${globalRowId}][travel_end]" id="t-end-${globalRowId}" onchange="calcDays(${globalRowId})" style="height:32px;">
                 </div>
                 
-                <div class="input-group" style="flex: 0 0 70px;">
-                    <span class="input-label">共(天)</span>
-                    <input type="number" name="items[${globalRowId}][travel_days]" id="t-days-${globalRowId}" readonly style="background:#eee;">
+                <div class="input-group" style="width: 60px;">
+                    <span class="input-label" style="color:#0050b3">天数</span>
+                    <input type="number" name="items[${globalRowId}][travel_days]" id="t-days-${globalRowId}" readonly style="background:#eee; height:32px;">
                 </div>
             </div>
         </div>
 
-        <div style="display:flex; gap:10px; width:100%;">
-            <div class="input-group" style="flex: 1;">
-                <span class="input-label">备注说明</span>
-                <input type="text" name="items[${globalRowId}][note]" placeholder="票据具体说明，如: 打车去机场" required>
-            </div>
-
-            <div class="input-group" style="flex: 0 0 180px;">
-                 <span class="input-label" style="color:#1677ff">发票 (图片/PDF)</span>
-                 <input type="file" name="invoice_${globalRowId}[]" multiple accept="image/*,.pdf" onchange="scanInvoiceQR(this, ${globalRowId})">
-                 <div id="scan-msg-${globalRowId}" style="font-size:10px; color:#999; margin-top:2px;"></div>
-            </div>
-            
-            <div class="input-group" style="flex: 0 0 180px;">
-                 <span class="input-label">辅证</span>
-                 <input type="file" name="support_${globalRowId}[]" multiple accept="image/*,.pdf">
-            </div>
-            
-            <div class="input-group" style="flex: 0 0 40px; justify-content: flex-end;">
-                <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('row-${globalRowId}').remove()"><i class="ri-delete-bin-line"></i></button>
-            </div>
-        </div>
     </div>`;
     
     document.getElementById(`body-${sectionId}`).insertAdjacentHTML('beforeend', rowHtml);
@@ -163,40 +156,23 @@ function addRow(sectionId) {
     globalRowId++;
 }
 
-// --- 类别切换逻辑 ---
+// --- 逻辑控制：切换类别时处理差旅显示 ---
 function onCategoryChange(id, val) {
     updateSubTypes(id, val);
-    const area = document.getElementById(`travel-area-${id}`);
-    
-    // 如果是差旅费，显示专属区域
+    const travelGroup = document.getElementById(`travel-group-${id}`);
+
     if (val === '差旅费报销单') {
-        area.style.display = 'block';
-        // 自动填入当前用户（从 header 里的变量取不太方便，暂时留空或让后端填）
+        // 差旅：显示第二行
+        travelGroup.style.display = 'block';
     } else {
-        area.style.display = 'none';
-        // 清空差旅数据，防止误提交
+        // 费用：隐藏第二行，保持单行
+        travelGroup.style.display = 'none';
         document.getElementById(`t-days-${id}`).value = '';
     }
 }
 
-// --- 自动计算天数 ---
-function calcDays(id) {
-    const s = document.getElementById(`t-start-${id}`).value;
-    const e = document.getElementById(`t-end-${id}`).value;
-    if (s && e) {
-        const d1 = new Date(s);
-        const d2 = new Date(e);
-        const diff = d2 - d1;
-        if (diff >= 0) {
-            const days = diff / (1000 * 60 * 60 * 24) + 1; // 算头算尾 +1
-            document.getElementById(`t-days-${id}`).value = days;
-        } else {
-            document.getElementById(`t-days-${id}`).value = 0;
-        }
-    }
-}
+// --- 3. 辅助功能 ---
 
-// --- 3. 计算器功能 ---
 function calc(input) {
     let val = input.value.trim();
     if (!val) return;
@@ -210,7 +186,42 @@ function calc(input) {
     }
 }
 
-// --- 4. 智能扫描 (含替票逻辑修正) ---
+function toggleInv(id) {
+    const chk = document.getElementById(`chk-${id}`);
+    document.getElementById(`inv-box-${id}`).style.display = chk.checked ? 'flex' : 'none';
+    document.getElementById(`scan-msg-${id}`).innerText = "";
+}
+
+function updateSubTypes(id, category) {
+    const subSelect = document.getElementById(`subtype-${id}`);
+    subSelect.innerHTML = "";
+    if(typeData[category]) {
+        typeData[category].forEach(item => {
+            const opt = document.createElement("option");
+            opt.value = item;
+            opt.innerText = item;
+            subSelect.appendChild(opt);
+        });
+    }
+}
+
+function calcDays(id) {
+    const s = document.getElementById(`t-start-${id}`).value;
+    const e = document.getElementById(`t-end-${id}`).value;
+    if (s && e) {
+        const d1 = new Date(s);
+        const d2 = new Date(e);
+        const diff = d2 - d1;
+        if (diff >= 0) {
+            const days = diff / (1000 * 60 * 60 * 24) + 1; 
+            document.getElementById(`t-days-${id}`).value = days;
+        } else {
+            document.getElementById(`t-days-${id}`).value = 0;
+        }
+    }
+}
+
+// --- 4. 智能扫描 ---
 function scanInvoiceQR(fileInput, rowId) {
     const files = fileInput.files;
     if (!files || files.length === 0) return;
@@ -221,7 +232,7 @@ function scanInvoiceQR(fileInput, rowId) {
     let processedCount = 0;
 
     const msgBox = document.getElementById(`scan-msg-${rowId}`);
-    msgBox.innerText = "正在分析...";
+    msgBox.innerText = "分析中...";
     msgBox.style.color = "#1677ff";
 
     function processCode(code) {
@@ -244,22 +255,17 @@ function scanInvoiceQR(fileInput, rowId) {
     function checkDone() {
         if (processedCount === files.length) {
             if (successCount > 0) {
-                // 判断是否勾选了“替票”
                 const isSub = document.getElementById(`chk-${rowId}`).checked;
-                
-                // 核心逻辑：如果是替票，填入【发票面额】；否则填入【报销金额】
                 let targetInputId = isSub ? `inv-amt-${rowId}` : `amt-${rowId}`;
                 document.getElementById(targetInputId).value = totalAmount.toFixed(2);
                 
-                // 填入日期 (日期总是可以自动填的)
                 if (foundDate) document.getElementById(`date-${rowId}`).value = foundDate;
 
-                // 提示文案
-                let targetName = isSub ? "发票面额" : "报销金额";
-                msgBox.innerHTML = `<i class="ri-checkbox-circle-line"></i> 已识别${successCount}张, 填入${targetName}: ¥${totalAmount.toFixed(2)}`;
+                let targetName = isSub ? "发票" : "报销";
+                msgBox.innerHTML = `<i class="ri-checkbox-circle-line"></i> ${successCount}张: ¥${totalAmount.toFixed(2)}`;
                 msgBox.style.color = "#28a745"; 
             } else {
-                msgBox.innerText = "未识别到二维码";
+                msgBox.innerText = "未识别";
                 msgBox.style.color = "#999";
             }
         }
@@ -308,7 +314,8 @@ function scanInvoiceQR(fileInput, rowId) {
                         processCode(code);
                     });
                 }).catch(function(err) {
-                    console.error("PDF解析失败", err);
+                    processedCount++; 
+                    checkDone();
                 }).finally(function() {
                     processedCount++;
                     checkDone();
@@ -323,88 +330,46 @@ function scanInvoiceQR(fileInput, rowId) {
     });
 }
 
-// --- 5. 辅助功能 ---
-function toggleInv(id) {
-    const chk = document.getElementById(`chk-${id}`);
-    document.getElementById(`inv-box-${id}`).style.display = chk.checked ? 'flex' : 'none';
-    
-    // 切换时清空提示信息，避免误导
-    document.getElementById(`scan-msg-${id}`).innerText = "";
-}
-
-function updateSubTypes(id, category) {
-    const subSelect = document.getElementById(`subtype-${id}`);
-    subSelect.innerHTML = "";
-    typeData[category].forEach(item => {
-        const opt = document.createElement("option");
-        opt.value = item;
-        opt.innerText = item;
-        subSelect.appendChild(opt);
-    });
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    if(document.getElementById('sections-container')) {
-        addCompanySection();
-    }
-});
-
-/* --- 后台审核增强功能 --- */
-
-// 1. 一键通过
-function approveAll(batchId, userId) {
-    if (confirm("⚠️ 确定要一键通过该员工本期所有【待审核】单据吗？\n(已驳回的单据不会被改变)")) {
-        location.href = `action.php?action=approve_all&bid=${batchId}&uid=${userId}`;
-    }
-}
-
-// 2. 预览查看器逻辑
+// --- 5. 预览与弹窗逻辑 ---
 let currentScale = 1;
 let currentX = 0;
 let currentY = 0;
 let isDraggingImg = false;
 let startX, startY;
 
-// 打开预览
 function previewFile(url, type) {
     const modal = document.getElementById('preview-modal');
     const body = document.getElementById('modal-body');
     const title = document.getElementById('modal-title');
-    // --- 新增：重置为图片预览的样式 (深色背景、居中、无滚动) ---
-    body.style.background = '';       // 清空内联样式，回退到 CSS 的 #333
-    body.style.overflow = '';         // 回退到 CSS 的 hidden
-    body.style.display = '';          // 回退到 CSS 的 flex 居中
-    body.style.padding = '';          // 清空内边距
     
-    // 重置状态
+    // 重置为图片模式样式
+    body.style.background = '';
+    body.style.overflow = '';
+    body.style.display = '';
+    body.style.padding = '';
+    
     currentScale = 1;
     currentX = 0;
     currentY = 0;
     
-    // 根据类型渲染
     if (type === 'pdf') {
-        title.innerText = "📄 PDF 预览";
+        title.innerHTML = "<i class='ri-file-pdf-line'></i> PDF预览";
         body.innerHTML = `<iframe src="${url}" class="pdf-viewer"></iframe>`;
     } else {
-        title.innerText = "🖼️ 图片预览 (滚轮缩放，拖拽移动)";
-        // 图片支持缩放和拖拽
+        title.innerHTML = "<i class='ri-image-line'></i> 图片预览";
         body.innerHTML = `<img src="${url}" class="img-viewer" id="target-img" draggable="false">`;
         
-        // 绑定图片的事件
         const img = document.getElementById('target-img');
         
-        // 滚轮缩放
         body.onwheel = function(e) {
             e.preventDefault();
-            const delta = e.deltaY > 0 ? 0.9 : 1.1; // 缩小 or 放大
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
             currentScale *= delta;
-            // 限制缩放范围
             if(currentScale < 0.5) currentScale = 0.5;
             if(currentScale > 5) currentScale = 5;
             applyTransform(img);
         };
 
-        // 鼠标拖拽图片 (只有放大了才能拖，或者随意拖)
         img.onmousedown = function(e) {
             isDraggingImg = true;
             startX = e.clientX - currentX;
@@ -427,8 +392,6 @@ function previewFile(url, type) {
     }
     
     modal.style.display = 'flex';
-    
-    // 居中弹窗窗口 (防止上次拖偏了)
     const box = document.getElementById('modal-box');
     box.style.top = "5%";
     box.style.left = "auto";
@@ -440,14 +403,17 @@ function applyTransform(img) {
 
 function closePreview() {
     document.getElementById('preview-modal').style.display = 'none';
-    document.getElementById('modal-body').innerHTML = ''; // 清空内容停止PDF加载
-    // 解绑事件防止内存泄漏
+    document.getElementById('modal-body').innerHTML = '';
     window.onmousemove = null;
     window.onmouseup = null;
 }
 
-// 3. 弹窗窗口拖拽 (拖动 Header)
+// 弹窗拖拽
 document.addEventListener('DOMContentLoaded', function() {
+    if(document.getElementById('sections-container')) {
+        addCompanySection();
+    }
+    
     const box = document.getElementById('modal-box');
     const header = document.getElementById('modal-header');
     
@@ -457,14 +423,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let boxX, boxY, mouseX, mouseY;
 
     header.onmousedown = function(e) {
-        if(e.target.tagName === 'BUTTON') return; // 点关闭按钮时不拖动
+        if(e.target.tagName === 'BUTTON') return;
         isDraggingBox = true;
         mouseX = e.clientX;
         mouseY = e.clientY;
         boxX = box.offsetLeft;
         boxY = box.offsetTop;
         
-        // 设为 absolute 以便拖动，原来可能是 flex 居中
         box.style.position = 'absolute'; 
         box.style.margin = '0';
         box.style.left = boxX + 'px';
@@ -483,3 +448,10 @@ document.addEventListener('DOMContentLoaded', function() {
         isDraggingBox = false;
     };
 });
+
+// 后台一键通过
+function approveAll(batchId, userId) {
+    if (confirm("确定一键通过本页所有【待审核】单据吗？")) {
+        location.href = `action.php?action=approve_all&bid=${batchId}&uid=${userId}`;
+    }
+}
