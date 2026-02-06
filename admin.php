@@ -161,13 +161,24 @@ include 'header.php';
                             </a>
                         </div>
 
-                        <div style="margin-top:5px; display:flex; gap:5px;">
-                            <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" class="btn btn-ghost btn-sm" style="color:#1890ff;">
-                                <i class="ri-file-word-2-line"></i> 费(Word)
-                            </a>
-                            <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" class="btn btn-ghost btn-sm" style="color:#1890ff;">
-                                <i class="ri-file-word-2-line"></i> 差(Word)
-                            </a>
+                        <div style="margin-top:5px; display:flex; flex-direction:column; gap:5px;">
+                            <div class="btn-group" style="display:flex; gap:2px;">
+                                <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" class="btn btn-ghost btn-sm" title="导出费用报销单(Word)" style="flex:1; text-align:center; border:1px solid #e8e8e8;">
+                                    <i class="ri-file-word-2-line" style="color:#1890ff;"></i> 费
+                                </a>
+                                <a href="export_word.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" class="btn btn-ghost btn-sm" title="导出差旅报销单(Word)" style="flex:1; text-align:center; border:1px solid #e8e8e8;">
+                                    <i class="ri-file-word-2-line" style="color:#1890ff;"></i> 差
+                                </a>
+                            </div>
+
+                            <div class="btn-group" style="display:flex; gap:2px;">
+                                <a href="print.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=费用报销单" target="_blank" class="btn btn-ghost btn-sm" title="图片打印：费用单" style="flex:1; text-align:center; font-size:12px; color:#666;">
+                                    <i class="ri-printer-line"></i> 费图
+                                </a>
+                                <a href="print.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=差旅费报销单" target="_blank" class="btn btn-ghost btn-sm" title="图片打印：差旅单" style="flex:1; text-align:center; font-size:12px; color:#666;">
+                                    <i class="ri-printer-line"></i> 差图
+                                </a>
+                            </div>
                         </div>
                     </td>
                 </tr>
