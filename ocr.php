@@ -278,7 +278,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     elseif (strpos($type_test_str, '住宿') !== false || strpos($type_test_str, '酒店') !== false || strpos($type_test_str, '客房') !== false) $info['type'] = '住宿费';
     elseif (strpos($type_test_str, '油') !== false && strpos($type_test_str, '号') !== false) $info['type'] = '加油费';
     elseif (strpos($type_test_str, '办公') !== false || strpos($type_test_str, '耗材') !== false) $info['type'] = '办公用品';
-
+    // ==========================================
+    // ✨ 新增：发票去重检测逻辑
+    // ==========================================
+    if (!empty($info['invoice_number'])) {
+        // 如果提取到了发票号码，直接检测号码是否在当前用户票夹中存在
+        $check = $pdo->prepare("SELECT id FROM invoices WHERE invoice_number=? AND user_id=?");
+        $check->execute([$info['invoice_number'], $_SESSION['user_id']]);
+        if ($check->fetch()) {
+            @unlink($abs_path); // 物理删除刚才上传的临时图片
+            echo json_encode(['error' => "发票号码 [{$info['invoice_number']}] 已存在，请勿重复上传"]);
+            exit;
+        }
+    } else {
+        // 如果是无编号的小票(如餐饮小票、部分通行费)，通过“金额 + 日期 + 销方”联合查重
+        $check = $pdo->prepare("SELECT id FROM invoices WHERE amount=? AND invoice_date=? AND seller_name=? AND user_id=?");
+        $check->execute([$info['amount'], $info['date'], $info['seller_name'], $_SESSION['user_id']]);
+        if ($check->fetch()) {
+            @unlink($abs_path); // 物理删除
+            echo json_encode(['error' => "发现相同金额({$info['amount']})、日期和商户的票据，疑似重复"]);
+            exit;
+        }
+    }
+    
     try {
         $stmt = $pdo->prepare("INSERT INTO invoices (
             user_id, file_path, file_type, amount, invoice_date, invoice_type, note, status,

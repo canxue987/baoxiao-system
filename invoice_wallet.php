@@ -2,10 +2,10 @@
 require_once 'config.php';
 include 'header.php';
 
-// --- 处理 AJAX 修改 ---
+// --- 处理 AJAX 修改 (金额和日期改为静态，不再需要更新它们) ---
 if (isset($_POST['action']) && $_POST['action'] == 'update') {
-    $stmt = $pdo->prepare("UPDATE invoices SET amount=?, invoice_date=?, invoice_type=?, note=? WHERE id=? AND user_id=? AND status='unused'");
-    $stmt->execute([$_POST['amount'], $_POST['date'], $_POST['type'], $_POST['note'], $_POST['id'], $_SESSION['user_id']]);
+    $stmt = $pdo->prepare("UPDATE invoices SET invoice_type=?, note=? WHERE id=? AND user_id=? AND status='unused'");
+    $stmt->execute([$_POST['type'], $_POST['note'], $_POST['id'], $_SESSION['user_id']]);
     echo "ok"; exit;
 }
 
@@ -87,13 +87,41 @@ if (isset($_POST['action']) && $_POST['action'] == 'download_zip') {
     exit;
 }
 
+// --- 获取筛选选项数据 (只查购方) ---
+$all_companies = $pdo->query("SELECT DISTINCT buyer_name FROM invoices WHERE user_id={$_SESSION['user_id']} AND buyer_name != ''")->fetchAll(PDO::FETCH_COLUMN);
+sort($all_companies);
+
+$all_sp_types = $pdo->query("SELECT DISTINCT invoice_special_type FROM invoices WHERE user_id={$_SESSION['user_id']} AND invoice_special_type != ''")->fetchAll(PDO::FETCH_COLUMN);
+sort($all_sp_types);
+
 // --- 获取列表数据 ---
 $filter = $_GET['status'] ?? 'unused';
+$filter_comp = $_GET['comp'] ?? '';
+$filter_sp = $_GET['sp'] ?? '';
+
+// ✨ 接收排序参数，默认降序(desc)
+$sort_order = isset($_GET['sort']) && strtolower($_GET['sort']) == 'asc' ? 'ASC' : 'DESC';
+
 $sql = "SELECT * FROM invoices WHERE user_id=? ";
-if ($filter != 'all') $sql .= " AND status = '$filter'";
-$sql .= " ORDER BY invoice_date DESC, id DESC";
+$params = [$_SESSION['user_id']];
+
+if ($filter != 'all') {
+    $sql .= " AND status = ? ";
+    $params[] = $filter;
+}
+if ($filter_comp) {
+    $sql .= " AND buyer_name = ? "; // 只筛选购方
+    $params[] = $filter_comp;
+}
+if ($filter_sp) {
+    $sql .= " AND invoice_special_type = ? ";
+    $params[] = $filter_sp;
+}
+
+// ✨ 应用排序参数
+$sql .= " ORDER BY id {$sort_order}";
 $stmt = $pdo->prepare($sql);
-$stmt->execute([$_SESSION['user_id']]);
+$stmt->execute($params);
 $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ✨ 计算当前列表的总金额
@@ -112,9 +140,25 @@ foreach($list as $item) {
 
 /* 票夹专属表格样式 */
 .rich-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
-.rich-table th { background: #fafafa; color: #8c8c8c; font-weight: 500; padding: 12px 16px; text-align: left; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
-.rich-table td { padding: 16px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; color: #333; transition: background 0.3s; }
-.rich-table tbody tr:hover { background: #fbfbfb; }
+
+/* ✨ 强化表头背景色，与数据行明显区分 */
+.rich-table th { 
+    background: #e6f0fa !important; /* 淡蓝灰色 */
+    color: #333; 
+    font-weight: 600; 
+    padding: 10px 16px; 
+    text-align: left; 
+    border-bottom: 2px solid #cce0f5; /* 加深底边框 */
+    white-space: nowrap; 
+}
+
+.rich-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; color: #333; transition: background 0.3s; }
+
+/* ✨ 强化斑马线底色 */
+.rich-table tbody tr.active-row:nth-child(even) { background-color: #f0f3f8; } /* 颜色比 fafafa 更深一点的灰蓝色 */
+.rich-table tbody tr.active-row:nth-child(odd) { background-color: #ffffff; }
+.rich-table tbody tr.locked-row { background-color: #eef0f4; opacity: 0.8; }
+.rich-table tbody tr:hover { background-color: #dcf0ff !important; } /* hover时更明显的蓝色 */
 
 /* ✨ 复选框美化 */
 .row-check { width: 16px; height: 16px; cursor: pointer; accent-color: #1890ff; }
@@ -158,10 +202,14 @@ input[type=number] {
         <h3 style="margin:0;"><i class="ri-wallet-3-line"></i> 我的票夹</h3>
         <div>
             <button onclick="document.getElementById('uploadFile').click()" class="btn btn-primary" style="border-radius: 6px;">
-                <i class="ri-upload-cloud-line"></i> 上传发票
+                <i class="ri-upload-cloud-line"></i> 批量/拖拽上传发票
             </button>
-            <input type="file" id="uploadFile" style="display:none" accept="image/*,.pdf" onchange="uploadInvoice()">
+            <input type="file" id="uploadFile" multiple style="display:none" accept="image/*,.pdf" onchange="uploadInvoice(this.files)">
         </div>
+    </div>
+
+    <div id="dragOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(24,144,255,0.1); border:4px dashed #1890ff; z-index:9999; align-items:center; justify-content:center; pointer-events:none;">
+        <h2 style="color:#1890ff; background:#fff; padding:20px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.1);"><i class="ri-upload-cloud-2-line"></i> 松开鼠标，立即上传</h2>
     </div>
 
     <div class="modern-tabs">
@@ -196,12 +244,43 @@ input[type=number] {
                     <th width="40" style="text-align:center;">
                         <input type="checkbox" id="selectAll" class="row-check" onclick="toggleAll(this)" title="全选/全不选">
                     </th>
-                    <th width="100">序号/编号</th>
-                    <th width="180">购方/销方名称</th>
+                    <?php 
+                        $next_sort = ($sort_order == 'DESC') ? 'asc' : 'desc'; 
+                        $sort_icon = ($sort_order == 'DESC') ? 'ri-sort-desc' : 'ri-sort-asc';
+                        $sort_title = ($sort_order == 'DESC') ? '当前最新在前，点击切换' : '当前最旧在前，点击切换';
+                    ?>
+                    <th width="100">
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            序号/编号
+                            <a href="javascript:;" onclick="toggleSort('<?php echo $next_sort; ?>')" style="color:#1890ff; background:#fff; border:1px solid #bae0ff; border-radius:4px; padding:2px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none;" title="<?php echo $sort_title; ?>">
+                                <i class="<?php echo $sort_icon; ?>"></i>
+                            </a>
+                        </div>
+                    </th>
+
+                    <th width="180">
+                        <div style="margin-bottom: 2px; color: #555; font-size:13px;">购方名称</div>
+                        <select id="filter-comp" onchange="applyFilter()" style="padding:0px 2px; height:20px; border-radius:3px; border:1px solid #ccc; width:100%; max-width:140px; font-size:11px; outline:none; background:#fff; color:#333; cursor:pointer;">
+                            <option value="">全部购方</option>
+                            <?php foreach($all_companies as $c): ?>
+                                <option value="<?php echo h($c); ?>" <?php if($filter_comp==$c) echo 'selected'; ?>><?php echo h(mb_substr($c,0,10)).(mb_strlen($c)>10?'...':''); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </th>
+
                     <th width="140">总金额(¥)</th>
                     <th width="130">开票内容</th>
                     <th width="130">日期 (开票/入库)</th>
-                    <th width="80">发票类型</th>
+
+                    <th width="90">
+                        <div style="margin-bottom: 2px; color: #555; font-size:13px;">发票类型</div>
+                        <select id="filter-sp" onchange="applyFilter()" style="padding:0px 2px; height:20px; border-radius:3px; border:1px solid #ccc; width:100%; max-width:85px; font-size:11px; outline:none; background:#fff; color:#333; cursor:pointer;">
+                            <option value="">全部类型</option>
+                            <?php foreach($all_sp_types as $s): ?>
+                                <option value="<?php echo h($s); ?>" <?php if($filter_sp==$s) echo 'selected'; ?>><?php echo h($s); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </th>
                     <th width="100">报销分类</th>
                     <th width="80">状态</th>
                     <th width="120">备注</th>
@@ -211,7 +290,6 @@ input[type=number] {
             <tbody>
                 <?php foreach($list as $item): 
                     $disabled = ($item['status'] != 'unused') ? 'disabled' : '';
-                    $row_bg = ($item['status'] != 'unused') ? '#fafafa' : '#fff';
                     $is_zp = (strpos($item['invoice_special_type'], '专') !== false);
                     $tag_class = $is_zp ? 'zp' : 'pp';
                     
@@ -219,7 +297,7 @@ input[type=number] {
                     $item['created_date'] = date('Y-m-d', strtotime($item['created_at']));
                     $json_data = htmlspecialchars(json_encode($item, JSON_UNESCAPED_UNICODE));
                 ?>
-                <tr id="row-<?php echo $item['id']; ?>" style="background:<?php echo $row_bg; ?>;">
+                <tr id="row-<?php echo $item['id']; ?>" class="<?php echo $item['status'] == 'unused' ? 'active-row' : 'locked-row'; ?>">
                     
                     <td style="text-align:center;">
                         <input type="checkbox" class="row-check invoice-checkbox" value="<?php echo $item['id']; ?>" data-amount="<?php echo $item['amount']; ?>" onchange="calcSelected()">
@@ -243,8 +321,9 @@ input[type=number] {
 
                     <td>
                         <div style="display:flex; align-items:center; color:#1890ff;">
-                            <span style="font-weight:bold; font-family:Verdana;">¥</span>
-                            <input type="number" step="0.01" id="amount-<?php echo $item['id']; ?>" value="<?php echo $item['amount']; ?>" onchange="saveRow(<?php echo $item['id']; ?>)" class="hidden-input text-price" style="width:115px; margin-left:2px; font-weight:bold;" <?php echo $disabled; ?>>
+                            <span style="font-weight:bold; font-family:Verdana; font-size: 15px;">
+                                ¥<?php echo number_format($item['amount'], 2); ?>
+                            </span>
                         </div>
                         <div class="text-sub" style="font-size:11px; transform:scale(0.9); transform-origin:left;">
                             不含税: ¥<?php echo $item['pre_tax_amount']; ?>
@@ -258,8 +337,8 @@ input[type=number] {
                     </td>
 
                     <td>
-                        <div style="margin-bottom:2px;">
-                            <input type="date" id="date-<?php echo $item['id']; ?>" value="<?php echo $item['invoice_date']; ?>" onchange="saveRow(<?php echo $item['id']; ?>)" class="hidden-input text-main" style="width:125px; font-family:monospace;" <?php echo $disabled; ?> title="开票日期">
+                        <div class="text-main" style="font-family:monospace; margin-bottom:2px; font-size:13px;">
+                            <?php echo $item['invoice_date']; ?>
                         </div>
                         <div class="text-sub" title="入库日期">
                             <i class="ri-download-cloud-2-line"></i> <?php echo $item['created_date']; ?>
@@ -436,46 +515,103 @@ function batchDelete() {
     });
 }
 
-// --- 上传逻辑 ---
-async function uploadInvoice() {
-    let file = document.getElementById('uploadFile').files[0];
-    if(!file) return;
+// --- 拖拽上传监听事件 ---
+document.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    document.getElementById('dragOverlay').style.display = 'flex';
+});
+document.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    // 确保鼠标移出浏览器窗口才隐藏，而不是移过子元素
+    if (e.relatedTarget === null || e.relatedTarget === document.documentElement) {
+        document.getElementById('dragOverlay').style.display = 'none';
+    }
+});
+document.addEventListener('drop', function(e) {
+    e.preventDefault();
+    document.getElementById('dragOverlay').style.display = 'none';
+    if (e.dataTransfer.files.length > 0) {
+        uploadInvoice(e.dataTransfer.files);
+    }
+});
+
+// --- ✨ 新增：切换排序方向 ---
+function toggleSort(order) {
+    let url = new URL(window.location.href);
+    url.searchParams.set('sort', order);
+    window.location.href = url.toString();
+}
+
+// --- ✨ 更新：下拉筛选时，保留当前的排序状态 ---
+function applyFilter() {
+    let comp = document.getElementById('filter-comp').value;
+    let sp = document.getElementById('filter-sp').value;
+    let url = new URL(window.location.href);
+    
+    if(comp) url.searchParams.set('comp', comp); else url.searchParams.delete('comp');
+    if(sp) url.searchParams.set('sp', sp); else url.searchParams.delete('sp');
+    
+    // 不干预 url 中已有的 sort 参数，直接跳转
+    window.location.href = url.toString();
+}
+
+// --- 批量上传逻辑重构 ---
+async function uploadInvoice(filesInput) {
+    let files = filesInput || document.getElementById('uploadFile').files;
+    if(!files || files.length === 0) return;
 
     let btn = document.querySelector('.btn-primary');
     let oldHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 正在请求百度大脑...';
     btn.disabled = true;
 
-    let formData = new FormData();
-    formData.append('file', file);
+    let successCnt = 0;
+    let failCnt = 0;
+    let failMsgs = [];
 
-    try {
-        let res = await fetch('ocr.php', { method: 'POST', body: formData });
-        let json = await res.json();
+    // 逐个文件处理，显示进度
+    for(let i = 0; i < files.length; i++) {
+        btn.innerHTML = `<i class="ri-loader-4-line ri-spin"></i> 正在上传识别 (${i+1}/${files.length})...`;
         
-        if (json.success) {
-            console.log("✅ 识别成功", json.extracted_data);
-            setTimeout(() => { location.reload(); }, 300); 
-        } else {
-            alert('入库失败: ' + (json.error || '无法识别发票'));
+        let formData = new FormData();
+        formData.append('file', files[i]);
+
+        try {
+            let res = await fetch('ocr.php', { method: 'POST', body: formData });
+            let json = await res.json();
+            
+            if (json.success) {
+                successCnt++;
+            } else {
+                failCnt++;
+                failMsgs.push(`[${files[i].name}]: ${json.error}`);
+            }
+        } catch(e) {
+            failCnt++;
+            failMsgs.push(`[${files[i].name}]: 网络异常或服务器错误`);
         }
-    } catch(e) {
-        alert('网络错误，请检查后台服务');
-    } finally {
-        btn.innerHTML = oldHTML;
-        btn.disabled = false;
-        document.getElementById('uploadFile').value = ''; 
+    }
+
+    btn.innerHTML = oldHTML;
+    btn.disabled = false;
+    document.getElementById('uploadFile').value = ''; 
+
+    // 上传完毕后的提示
+    if (failCnt > 0) {
+        alert(`上传完成：成功 ${successCnt} 张，失败 ${failCnt} 张。\n\n失败原因：\n` + failMsgs.join('\n'));
+    }
+    
+    // 只要有成功的，就刷新页面查看
+    if (successCnt > 0) {
+        location.reload(); 
     }
 }
 
-// --- 自动保存逻辑 ---
+// --- 自动保存逻辑 (去掉了 date 和 amount) ---
 function saveRow(id) {
     let data = new FormData();
     data.append('action', 'update');
     data.append('id', id);
-    data.append('date', document.getElementById('date-'+id).value);
     data.append('type', document.getElementById('type-'+id).value);
-    data.append('amount', document.getElementById('amount-'+id).value);
     data.append('note', document.getElementById('note-'+id).value);
 
     fetch('invoice_wallet.php', { method: 'POST', body: data })
@@ -487,9 +623,7 @@ function saveRow(id) {
                 noteInput.style.backgroundColor = '#f6ffed';
                 setTimeout(() => noteInput.style.backgroundColor = 'transparent', 800);
             }
-            // 重新计算底部合计和已选合计
             calcSelected();
-            // 注意: 为了体验不闪屏，没有强制全页刷新重算"当前列表总额"，下次刷新自然会更新
         }
     });
 }
