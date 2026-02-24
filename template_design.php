@@ -91,7 +91,7 @@ include 'header.php';
             <div class="tag-group-title">按费用类型 (金额/张数)</div>
             <?php 
             // 这里我们硬编码 main.js 里的那些类型，或者让用户手动添加
-            $common_types = ["招待费", "办公费", "交通费", "停车费", "过路桥费", "团建费", "福利费", "飞机票", "火车票", "住宿费", "市内交通", "差旅补贴"];
+            $common_types = ["招待费", "办公费", "交通费", "停车费", "过路桥费", "飞机票", "车船票", "住宿费", "交通车票", "汽油费"];
             foreach($common_types as $t): 
             ?>
             <div class="tool-tag" onclick="addTag('{<?php echo $t; ?>_金额}')"><?php echo $t; ?>-金额</div>
