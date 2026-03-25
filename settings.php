@@ -52,6 +52,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
+    // 保存个人邮箱配置
+    if (isset($_POST['save_email_settings'])) {
+        $i_server = trim($_POST['imap_server']);
+        $i_user = trim($_POST['imap_user']);
+        $i_pass = trim($_POST['imap_pass']); 
+        // 简单混淆加密一下授权码，防止在数据库中明文裸奔
+        $i_pass_encrypted = $i_pass ? base64_encode($i_pass) : '';
+
+        $stmt = $pdo->prepare("UPDATE users SET imap_server=?, imap_user=?, imap_pass=? WHERE id=?");
+        if ($stmt->execute([$i_server, $i_user, $i_pass_encrypted, $_SESSION['user_id']])) {
+            $msg = "邮箱发票收取配置已保存！"; $msg_type = "success";
+        } else {
+            $msg = "邮箱配置保存失败。"; $msg_type = "error";
+        }
+    }
+
     if (isset($_SESSION['role']) && $_SESSION['role'] == 'admin') {
         if (isset($_POST['save_settings'])) {
             $new_name = trim($_POST['sys_name']);
@@ -113,7 +129,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 }
-
+// 获取当前用户的邮箱配置用于回显
+    $stmt_u = $pdo->prepare("SELECT imap_server, imap_user, imap_pass FROM users WHERE id=?");
+    $stmt_u->execute([$_SESSION['user_id']]);
+    $curr_user_settings = $stmt_u->fetch(PDO::FETCH_ASSOC);
+    $curr_imap_pass = $curr_user_settings['imap_pass'] ? base64_decode($curr_user_settings['imap_pass']) : '';
+    
 include 'header.php';
 ?>
 
@@ -293,6 +314,37 @@ include 'header.php';
                     </form>
                 </div>
             </div>
+            <div class="setting-card" style="border-top: 3px solid #fa8c16;">
+                <div class="card-header">
+                    <i class="ri-mail-download-line" style="color:#fa8c16; font-size:18px;"></i>
+                    <h3>自动收取发票邮箱</h3>
+                </div>
+                <div class="card-body">
+                    <p style="color:#666; font-size:12px; margin-bottom:15px; line-height:1.5;">
+                        配置您的工作邮箱，系统可直接从中提取发票存入票夹。
+                    </p>
+                    <form method="post">
+                        <div style="margin-bottom:12px;">
+                            <label style="display:block; margin-bottom:4px; color:#666; font-size:13px;">IMAP 服务器</label>
+                            <input type="text" name="imap_server" class="form-control" placeholder="例: imap.qq.com" value="<?php echo h($curr_user_settings['imap_server'] ?? ''); ?>">
+                        </div>
+                        <div style="margin-bottom:12px;">
+                            <label style="display:block; margin-bottom:4px; color:#666; font-size:13px;">邮箱账号</label>
+                            <input type="text" name="imap_user" class="form-control" placeholder="完整邮箱地址" value="<?php echo h($curr_user_settings['imap_user'] ?? ''); ?>">
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="display:flex; justify-content:space-between; margin-bottom:4px; color:#666; font-size:13px;">
+                                <span>IMAP 授权码</span>
+                                <a href="javascript:;" onclick="showEmailGuide()" style="color:#1890ff; text-decoration:none;"><i class="ri-question-line"></i> 如何获取？</a>
+                            </label>
+                            <input type="password" name="imap_pass" class="form-control" placeholder="填入邮箱后台生成的授权码" value="<?php echo h($curr_imap_pass); ?>">
+                        </div>
+                        <div style="text-align:right;">
+                            <button type="submit" name="save_email_settings" value="1" class="btn btn-secondary btn-sm" style="background:#fa8c16; border-color:#fa8c16; color:#fff;">保存邮箱配置</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
 
         </div>
     </div>
@@ -317,6 +369,35 @@ include 'header.php';
                     </button>
                 </form>
             </div>
+            <div class="setting-card" style="border-top: 3px solid #fa8c16; margin-top: 20px;">
+            <div class="card-header">
+                <i class="ri-mail-download-line" style="color:#fa8c16; font-size:20px;"></i>
+                <h3 style="font-size:18px;">自动收取发票邮箱</h3>
+            </div>
+            <div class="card-body" style="padding: 30px;">
+                <p style="margin-bottom:20px; color:#666; font-size:13px;">配置后，在“我的票夹”中点击收取，即可自动读取邮箱中的发票附件。</p>
+                <form method="post">
+                    <div style="margin-bottom:15px;">
+                        <label style="display:block; margin-bottom:8px; font-weight:bold;">IMAP 服务器</label>
+                        <input type="text" name="imap_server" class="form-control" placeholder="例: imap.163.com" value="<?php echo h($curr_user_settings['imap_server'] ?? ''); ?>">
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <label style="display:block; margin-bottom:8px; font-weight:bold;">邮箱账号</label>
+                        <input type="text" name="imap_user" class="form-control" placeholder="完整的邮箱地址" value="<?php echo h($curr_user_settings['imap_user'] ?? ''); ?>">
+                    </div>
+                    <div style="margin-bottom:20px;">
+                        <label style="display:flex; justify-content:space-between; margin-bottom:8px; font-weight:bold;">
+                            <span>IMAP 授权码</span>
+                            <a href="javascript:;" onclick="showEmailGuide()" style="color:#1890ff; text-decoration:none; font-weight:normal; font-size:13px;"><i class="ri-question-line"></i> 如何获取？</a>
+                        </label>
+                        <input type="password" name="imap_pass" class="form-control" placeholder="请填入邮箱安全设置中的授权码" value="<?php echo h($curr_imap_pass); ?>">
+                    </div>
+                    <button type="submit" name="save_email_settings" value="1" class="btn btn-primary" style="width:100%; padding:10px; background:#fa8c16; border-color:#fa8c16;">
+                        <i class="ri-save-line"></i> 保存邮箱配置
+                    </button>
+                </form>
+            </div>
+        </div>
         </div>
     </div>
 
@@ -338,6 +419,67 @@ function renameComp(oldName) {
     }
 }
 </script>
+<div id="emailGuideModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:8px; width:650px; max-width:95%; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+        
+        <div style="padding:16px 24px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center; background:#fafafa; border-radius:8px 8px 0 0;">
+            <h3 style="margin:0; font-size:16px; color:#333;"><i class="ri-book-read-line" style="color:#fa8c16; margin-right:5px;"></i> QQ邮箱 IMAP 授权码获取教程</h3>
+            <button onclick="document.getElementById('emailGuideModal').style.display='none'" style="border:none; background:none; font-size:24px; color:#999; cursor:pointer;">&times;</button>
+        </div>
+        
+        <div style="padding:24px; line-height:1.6; color:#444; font-size:14px; overflow-y:auto; max-height:60vh;">
+            
+            <div style="margin-bottom:20px;">
+                <strong style="color:#1890ff; font-size:15px;"><i class="ri-settings-2-line"></i> 1. 系统参数填写说明：</strong>
+                <ul style="margin-top:10px; padding-left:20px; background:#f0f7ff; padding:12px 12px 12px 30px; border-radius:6px; border:1px solid #bae0ff;">
+                    <li style="margin-bottom:6px;"><strong>IMAP 服务器：</strong> <span style="font-family:monospace; color:#cf1322; font-weight:bold; background:#fff; padding:2px 6px; border-radius:4px; border:1px solid #ffccc7;">imap.qq.com</span></li>
+                    <li><strong>邮箱账号：</strong> 填写您自己的完整QQ邮箱地址（如: 123456@qq.com）</li>
+                </ul>
+            </div>
 
+            <div style="margin-bottom:15px;">
+                <strong style="color:#1890ff; font-size:15px;"><i class="ri-key-2-line"></i> 2. 授权码获取步骤（电脑网页版）：</strong>
+            </div>
+            
+            <div style="display:flex; flex-direction:column; gap:16px;">
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                    <span style="background:#fa8c16; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; flex-shrink:0;">1</span>
+                    <div>登录网页版QQ邮箱，在页面顶部右上角点击 <strong>“设置”</strong>。</div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                    <span style="background:#fa8c16; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; flex-shrink:0;">2</span>
+                    <div>在进入的设置页面中，查看左侧边栏，滑动到最下方点击 <strong>“账号安全”</strong>。</div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                    <span style="background:#fa8c16; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; flex-shrink:0;">3</span>
+                    <div>在新弹出的网页窗口中，点击左侧菜单的 <strong>“安全设置”</strong>。</div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                    <span style="background:#fa8c16; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; flex-shrink:0;">4</span>
+                    <div>找到“POP3/IMAP/SMTP/Exchange/CardDAV 服务”一栏，选择 <strong>“开启服务”</strong>（若已开启请忽略）。</div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                    <span style="background:#fa8c16; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; flex-shrink:0;">5</span>
+                    <div>服务开启后，点击下方的 <strong>“生成授权码”</strong> 按钮，按提示使用绑定的手机号发送短信验证。</div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                    <span style="background:#fa8c16; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; flex-shrink:0;">6</span>
+                    <div>验证成功后，屏幕上会显示一串字母密码。<strong>将其复制并粘贴到本系统的“IMAP 授权码”输入框中</strong>，点击保存即可！</div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="padding:16px 24px; border-top:1px solid #f0f0f0; background:#fafafa; text-align:right; border-radius:0 0 8px 8px;">
+            <button onclick="document.getElementById('emailGuideModal').style.display='none'" class="btn btn-primary" style="padding:8px 24px; background:#fa8c16; border-color:#fa8c16;">我学会了</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// 控制弹窗显示的函数
+function showEmailGuide() {
+    document.getElementById('emailGuideModal').style.display = 'flex';
+}
+</script>
 </body>
 </html>

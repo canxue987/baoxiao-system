@@ -200,9 +200,12 @@ input[type=number] {
 <div class="card" style="padding: 24px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
         <h3 style="margin:0;"><i class="ri-wallet-3-line"></i> 我的票夹</h3>
-        <div>
+        <div style="display:flex; gap:10px;">
+            <button id="btn-fetch-email" onclick="fetchEmailInvoices()" class="btn btn-secondary" style="border-radius: 6px; background: #fff; border: 1px solid #1890ff; color: #1890ff;">
+                <i class="ri-mail-download-line"></i> 收取邮件发票
+            </button>
             <button onclick="document.getElementById('uploadFile').click()" class="btn btn-primary" style="border-radius: 6px;">
-                <i class="ri-upload-cloud-line"></i> 批量/拖拽上传发票
+                <i class="ri-upload-cloud-line"></i> 本地批量上传
             </button>
             <input type="file" id="uploadFile" multiple style="display:none" accept="image/*,.pdf" onchange="uploadInvoice(this.files)">
         </div>
@@ -412,20 +415,21 @@ input[type=number] {
 </div>
 
 <div id="invoiceDetailModal" class="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
-    <div class="modal-box" style="background:#fff; border-radius:8px; width:850px; max-width:95%; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+    <div class="modal-box" style="background:#fff; border-radius:8px; width:1300px; max-width:95%; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
         
         <div style="padding:15px 24px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center; background:#fafafa;">
             <h3 style="margin:0; font-size:16px; color:#333;"><i class="ri-file-info-line" style="color:#1890ff;"></i> 发票详情信息</h3>
             <button onclick="document.getElementById('invoiceDetailModal').style.display='none'" style="background:none; border:none; font-size:24px; color:#999; cursor:pointer;">&times;</button>
         </div>
         
-        <div style="display:flex; padding:20px; gap:20px; max-height:60vh; overflow-y:auto;">
-            <div style="flex:1.2; border:1px solid #eee; border-radius:6px; display:flex; align-items:center; justify-content:center; background:#f9f9f9; min-height:300px; padding:10px;">
+        <div style="display:flex; padding:20px; gap:20px; max-height:90vh; overflow-y:auto;">
+            
+            <div style="flex:2.2; border:1px solid #eee; border-radius:6px; display:flex; align-items:center; justify-content:center; background:#f9f9f9; min-height:600px; padding:10px;">
                 <img id="detail-img" src="" style="max-width:100%; max-height:100%; object-fit:contain; display:none;">
-                <iframe id="detail-pdf" src="" style="width:100%; height:400px; border:none; display:none;"></iframe>
+                <iframe id="detail-pdf" src="" style="width:100%; height:100%; min-height:600px; border:none; display:none;"></iframe>
             </div>
             
-            <div style="flex:1;">
+            <div style="flex:1; min-width: 320px;">
                 <table class="detail-table">
                     <tbody id="detail-info-tbody">
                         </tbody>
@@ -554,7 +558,52 @@ function applyFilter() {
     // 不干预 url 中已有的 sort 参数，直接跳转
     window.location.href = url.toString();
 }
+// --- 自动收取邮件逻辑 ---
+async function fetchEmailInvoices() {
+    let btn = document.getElementById('btn-fetch-email');
+    let oldHTML = btn.innerHTML;
+    
+    // UI 变化：显示正在连接邮箱
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 正在连接邮箱...';
+    btn.disabled = true;
 
+    try {
+        let res = await fetch('fetch_email.php');
+        let json = await res.json();
+        
+        if (json.error) {
+            alert(json.error);
+        } else if (json.success) {
+            let filesData = json.files;
+            
+            if (filesData.length === 0) {
+                alert('收信完成：最近7天内没有找到新的含发票(PDF/图片)的邮件。');
+            } else {
+                // UI 变化：提示抓取到附件，开始复用 OCR 逻辑
+                btn.innerHTML = `<i class="ri-loader-4-line ri-spin"></i> 下载并识别 ${filesData.length} 张...`;
+                
+                let fileObjects = [];
+                // 将服务器返回的 URL 转化为前端 File 对象，完美伪装成人工拖拽上传
+                for (let i = 0; i < filesData.length; i++) {
+                    let fileRes = await fetch(filesData[i].url);
+                    let blob = await fileRes.blob();
+                    let file = new File([blob], filesData[i].name, { type: blob.type });
+                    fileObjects.push(file);
+                }
+                
+                // 直接调用现有的批量识别入库逻辑！
+                await uploadInvoice(fileObjects);
+                return; // uploadInvoice 成功后会自己刷新页面，不需要重置按钮
+            }
+        }
+    } catch(e) {
+        alert('获取邮件失败，可能是网络异常或服务器未开启 IMAP 扩展');
+    }
+    
+    // 恢复按钮状态
+    btn.innerHTML = oldHTML;
+    btn.disabled = false;
+}
 // --- 批量上传逻辑重构 ---
 async function uploadInvoice(filesInput) {
     let files = filesInput || document.getElementById('uploadFile').files;

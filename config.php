@@ -64,6 +64,19 @@ try {
     if (!in_array('department', $u_cols)) $pdo->exec("ALTER TABLE users ADD COLUMN department TEXT DEFAULT ''");
     if (!in_array('bank_account', $u_cols)) $pdo->exec("ALTER TABLE users ADD COLUMN bank_account TEXT DEFAULT ''");
     
+    // --- 邮箱自动收票字段升级 ---
+    if (!in_array('imap_server', $u_cols)) $pdo->exec("ALTER TABLE users ADD COLUMN imap_server TEXT DEFAULT ''");
+    if (!in_array('imap_user', $u_cols)) $pdo->exec("ALTER TABLE users ADD COLUMN imap_user TEXT DEFAULT ''");
+    if (!in_array('imap_pass', $u_cols)) $pdo->exec("ALTER TABLE users ADD COLUMN imap_pass TEXT DEFAULT ''");
+    
+    // 创建邮件拉取记录表，防止重复拉取发票
+    $pdo->exec("CREATE TABLE IF NOT EXISTS email_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        uid TEXT,
+        processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
     // 初始化用户
     $stmt = $pdo->query("SELECT count(*) FROM users WHERE username='admin'");
     if ($stmt->fetchColumn() == 0) {
