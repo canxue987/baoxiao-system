@@ -2,9 +2,9 @@
 require_once 'config.php';
 if (!isset($_SESSION['user_id'])) die("未登录");
 
-$batch_id = $_GET['batch_id'];
-$user_id = $_GET['user_id'];
-$type = $_GET['type']; 
+$batch_id = $_GET['batch_id'] ?? 0;
+$user_id = $_GET['user_id'] ?? 0;
+$type = $_GET['type'] ?? '';
 
 // --- AJAX保存接口 ---
 if (isset($_POST['action']) && $_POST['action'] == 'save_scale') {
@@ -43,62 +43,21 @@ if (file_exists($img_path)) {
     }
 }
 
-// 2. 获取数据 
+// 2. 获取数据并按公司进行分组 (核心修改点)
 $stmt = $pdo->prepare("SELECT i.*, u.realname, u.department, u.bank_account 
                        FROM items i 
                        LEFT JOIN users u ON i.user_id = u.id 
-                       WHERE i.batch_id=? AND i.user_id=? AND i.category=? AND i.status!='rejected'");
+                       WHERE i.batch_id=? AND i.user_id=? AND i.category=? AND i.status!='rejected'
+                       ORDER BY i.company ASC");
 $stmt->execute([$batch_id, $user_id, $type]);
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$all_rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-if (empty($rows)) die("没有找到该类型的数据");
+if (empty($all_rows)) die("没有找到该类型的数据");
 
-// 3. 数据聚合
-$data = [];
-$first = $rows[0];
-
-// 基础信息
-$data['{公司主体}'] = $first['company'];
-$data['{报销部门}'] = $first['department'];
-$data['{报销人姓名}'] = $first['realname'];
-$data['{报销账号}'] = $first['bank_account'];
-$data['{填报日期}'] = date('Y-m-d');
-$projects = array_unique(array_column($rows, 'project_name'));
-$data['{所属项目}'] = implode(',', array_filter($projects));
-
-// 差旅专属
-$data['{出差事由}'] = $first['travel_reason'];
-$data['{出差人员}'] = $first['travelers'];
-$data['{开始日期}'] = $first['travel_start'];
-$data['{结束日期}'] = $first['travel_end'];
-$data['{出差天数}'] = $first['travel_days'];
-
-// 统计
-$total_money = 0;
-$total_files = 0;
-$type_stats = []; 
-
-foreach ($rows as $r) {
-    $amt = $r['amount'];
-    $total_money += $amt;
-    $invs = json_decode($r['invoice_path'] ?: '[]');
-    $count = count($invs);
-    $total_files += $count;
-    $t = $r['type'];
-    if (!isset($type_stats[$t])) $type_stats[$t] = ['amt' => 0, 'cnt' => 0];
-    $type_stats[$t]['amt'] += $amt;
-    $type_stats[$t]['cnt'] += $count;
-}
-
-if (!function_exists('num2rmb')) { function num2rmb($number) { return "请更新config"; } }
-
-$data['{报销总额_小写}'] = number_format($total_money, 2);
-$data['{报销总额_大写}'] = num2rmb($total_money);
-$data['{附件总张数}'] = $total_files;
-
-foreach ($type_stats as $typeName => $stat) {
-    $data["{{$typeName}_金额}"] = number_format($stat['amt'], 2);
-    $data["{{$typeName}_张数}"] = $stat['cnt'] > 0 ? $stat['cnt'] : ''; 
+// ✨ 将拉取到的所有数据，按照“公司主体”进行拆分归类
+$grouped_rows = [];
+foreach ($all_rows as $r) {
+    $grouped_rows[$r['company']][] = $r;
 }
 ?>
 <!DOCTYPE html>
@@ -128,7 +87,7 @@ foreach ($type_stats as $typeName => $stat) {
             padding: 4px 5px 2px 5px; 
             line-height: 1.0;
             transform-origin: top left;
-            transition: top 0.1s; /* 让调整过程有丝滑动画 */
+            transition: top 0.1s; 
         }
         /* 悬浮工具栏 */
         .toolbar {
@@ -169,6 +128,7 @@ foreach ($type_stats as $typeName => $stat) {
 
         @media print {
             body { background: #fff; margin: 0; }
+            /* ✨ 核心魔法：page-break-after 保证了循环生成的多个div在打印时必定强制分页 */
             .page { margin: 0; box-shadow: none; page-break-after: always; }
             .toolbar, .calibration-panel { display: none !important; }
         }
@@ -176,24 +136,74 @@ foreach ($type_stats as $typeName => $stat) {
 </head>
 <body>
 
-<div class="page">
-    <img src="<?php echo h($tpl['bg_image']); ?>" class="bg-img">
-    
-    <?php foreach($config as $item): ?>
-        <?php 
-            $key = $item['key'];
-            $val = $data[$key] ?? ''; 
-            if ($val === '') continue;
-            // 注意：这里 PHP 只输出原始坐标 data-origin-y，不进行计算
-            // 具体的计算交给下面的 JS 实时处理
-        ?>
-        <div class="data-text" 
-             data-origin-y="<?php echo $item['y']; ?>" 
-             style="left: <?php echo $item['x']; ?>%; top: <?php echo $item['y']; ?>%; font-size: <?php echo $item['size']; ?>px;">
-            <?php echo h($val); ?>
-        </div>
-    <?php endforeach; ?>
-</div>
+<?php foreach ($grouped_rows as $comp_name => $rows): ?>
+    <?php 
+    // 3. ✨ 针对当前循环到的“特定公司主体”进行独立的数据聚合计算
+    $data = [];
+    $first = $rows[0];
+
+    // 基础信息
+    $data['{公司主体}'] = $comp_name;
+    $data['{报销部门}'] = $first['department'];
+    $data['{报销人姓名}'] = $first['realname'];
+    $data['{报销账号}'] = $first['bank_account'];
+    $data['{填报日期}'] = date('Y-m-d');
+    $projects = array_unique(array_column($rows, 'project_name'));
+    $data['{所属项目}'] = implode(',', array_filter($projects));
+
+    // 差旅专属
+    $data['{出差事由}'] = $first['travel_reason'];
+    $data['{出差人员}'] = $first['travelers'];
+    $data['{开始日期}'] = $first['travel_start'];
+    $data['{结束日期}'] = $first['travel_end'];
+    $data['{出差天数}'] = $first['travel_days'];
+
+    // 金额与数量统计 (仅限该公司)
+    $total_money = 0;
+    $total_files = 0;
+    $type_stats = []; 
+
+    foreach ($rows as $r) {
+        $amt = $r['amount'];
+        $total_money += $amt;
+        $invs = json_decode($r['invoice_path'] ?: '[]');
+        $count = count($invs);
+        $total_files += $count;
+        $t = $r['type'];
+        if (!isset($type_stats[$t])) $type_stats[$t] = ['amt' => 0, 'cnt' => 0];
+        $type_stats[$t]['amt'] += $amt;
+        $type_stats[$t]['cnt'] += $count;
+    }
+
+    if (!function_exists('num2rmb')) { function num2rmb($number) { return "请更新config"; } }
+
+    $data['{报销总额_小写}'] = number_format($total_money, 2);
+    $data['{报销总额_大写}'] = num2rmb($total_money);
+    $data['{附件总张数}'] = $total_files;
+
+    foreach ($type_stats as $typeName => $stat) {
+        $data["{{$typeName}_金额}"] = number_format($stat['amt'], 2);
+        $data["{{$typeName}_张数}"] = $stat['cnt'] > 0 ? $stat['cnt'] : ''; 
+    }
+    ?>
+
+    <div class="page">
+        <img src="<?php echo h($tpl['bg_image']); ?>" class="bg-img">
+        
+        <?php foreach($config as $item): ?>
+            <?php 
+                $key = $item['key'];
+                $val = $data[$key] ?? ''; 
+                if ($val === '') continue;
+            ?>
+            <div class="data-text" 
+                 data-origin-y="<?php echo $item['y']; ?>" 
+                 style="left: <?php echo $item['x']; ?>%; top: <?php echo $item['y']; ?>%; font-size: <?php echo $item['size']; ?>px;">
+                <?php echo h($val); ?>
+            </div>
+        <?php endforeach; ?>
+    </div>
+<?php endforeach; ?>
 
 <div class="toolbar">
     <button class="btn-float" onclick="toggleCalibration()">

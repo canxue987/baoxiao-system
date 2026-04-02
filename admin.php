@@ -151,6 +151,9 @@ include 'header.php';
                                 <a href="download.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>&type=zip" class="btn btn-ghost btn-sm" title="下载附件包">
                                     <i class="ri-folder-zip-line"></i>
                                 </a>
+                                <a href="print_invoices.php?batch_id=<?php echo $active_batch_id; ?>&user_id=<?php echo $u['id']; ?>" target="_blank" class="btn btn-ghost btn-sm" title="A4排版打印发票附件 (一页两张)" style="color:#52c41a; border-color:#b7eb8f; background:#f6ffed;">
+                                    <i class="ri-printer-cloud-line"></i>
+                                </a>
                             </div>
 
                             <div class="btn-group" style="display:flex; gap:2px;">
@@ -313,7 +316,8 @@ include 'header.php';
                         '备注说明' => $item['note']
                     ];
                     $meta_data = array_filter($meta_data, function($v) { return !empty($v); });
-                    $json_str = htmlspecialchars(json_encode($meta_data, JSON_UNESCAPED_UNICODE));
+                    // ✨ 终极护盾：防止奇葩备注或明细破坏管理员的审核按钮
+                    $json_str = htmlspecialchars(json_encode($meta_data, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
                 ?>
                 <tr style="<?php if($item['status']=='rejected') echo 'background:#fff1f0; opacity:0.6;'; elseif($item['status']=='approved') echo 'background:#f6ffed;'; ?>">
                     <td><span class="tag tag-blue"><?php echo h($item['company']); ?></span></td>

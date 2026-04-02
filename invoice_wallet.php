@@ -1,12 +1,76 @@
 <?php
 require_once 'config.php';
-include 'header.php';
+//include 'header.php';
 
 // --- 处理 AJAX 修改 (金额和日期改为静态，不再需要更新它们) ---
 if (isset($_POST['action']) && $_POST['action'] == 'update') {
     $stmt = $pdo->prepare("UPDATE invoices SET invoice_type=?, note=? WHERE id=? AND user_id=? AND status='unused'");
     $stmt->execute([$_POST['type'], $_POST['note'], $_POST['id'], $_SESSION['user_id']]);
     echo "ok"; exit;
+}
+
+// --- ✨ 处理凑票标记切换 ---
+if (isset($_POST['action']) && $_POST['action'] == 'toggle_reserve') {
+    $id = intval($_POST['id']);
+    $pdo->prepare("UPDATE invoices SET is_reserved = CASE WHEN is_reserved=1 THEN 0 ELSE 1 END WHERE id=? AND user_id=?")->execute([$id, $_SESSION['user_id']]);
+    echo "ok"; exit;
+}
+
+// --- ✨ 处理发票赠送 ---
+if (isset($_POST['action']) && $_POST['action'] == 'gift_invoices') {
+    $ids = array_map('intval', explode(',', $_POST['ids']));
+    $target_uid = intval($_POST['target_uid']);
+
+    if (!empty($ids) && $target_uid > 0) {
+        $id_str = implode(',', $ids);
+        // 安全锁：只能赠送 unused 状态的，且属于自己的发票
+        $stmt = $pdo->prepare("UPDATE invoices SET user_id=? WHERE id IN ($id_str) AND user_id=? AND status='unused'");
+        $stmt->execute([$target_uid, $_SESSION['user_id']]);
+    }
+    echo "ok"; exit;
+}
+
+// ✨ 获取其他同事列表，用于在弹窗的下拉框中显示
+$all_other_users = $pdo->prepare("SELECT id, realname, username FROM users WHERE id != ? ORDER BY id");
+$all_other_users->execute([$_SESSION['user_id']]);
+$all_other_users = $all_other_users->fetchAll(PDO::FETCH_ASSOC);
+
+// --- ✨ 处理手动录入发票 ---
+if (isset($_POST['action']) && $_POST['action'] == 'manual_add') {
+    $amount = floatval($_POST['amount']);
+    $invoice_date = $_POST['invoice_date'];
+    $buyer_name = trim($_POST['buyer_name']);
+    $seller_name = trim($_POST['seller_name']);
+    $invoice_number = trim($_POST['invoice_number']);
+    $invoice_special_type = trim($_POST['invoice_special_type']);
+    $invoice_detail = trim($_POST['invoice_detail']);
+    $pre_tax_amount = floatval($_POST['pre_tax_amount'] ?? 0);
+    $tax_amount = floatval($_POST['tax_amount'] ?? 0);
+
+    $file_path = '';
+    $file_type = '';
+
+    // 如果上传了文件，保存到 uploads/manual 目录
+    if (isset($_FILES['invoice_file']) && $_FILES['invoice_file']['error'] == UPLOAD_ERR_OK) {
+        $upload_dir = __DIR__ . '/uploads/manual/';
+        if (!is_dir($upload_dir)) @mkdir($upload_dir, 0777, true);
+        
+        $ext = strtolower(pathinfo($_FILES['invoice_file']['name'], PATHINFO_EXTENSION));
+        $new_filename = uniqid('man_') . '.' . $ext;
+        
+        if (move_uploaded_file($_FILES['invoice_file']['tmp_name'], $upload_dir . $new_filename)) {
+            $file_path = 'uploads/manual/' . $new_filename;
+            $file_type = ($ext == 'pdf') ? 'pdf' : 'image';
+        }
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO invoices (user_id, file_path, file_type, amount, pre_tax_amount, tax_amount, invoice_date, buyer_name, seller_name, invoice_number, invoice_special_type, invoice_detail, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unused')");
+    if($stmt->execute([$_SESSION['user_id'], $file_path, $file_type, $amount, $pre_tax_amount, $tax_amount, $invoice_date, $buyer_name, $seller_name, $invoice_number, $invoice_special_type, $invoice_detail])) {
+        echo "ok";
+    } else {
+        echo "err";
+    }
+    exit;
 }
 
 // --- 处理单条删除 ---
@@ -129,6 +193,9 @@ $total_list_amount = 0;
 foreach($list as $item) {
     $total_list_amount += floatval($item['amount']);
 }
+
+include 'header.php';
+
 ?>
 
 <style>
@@ -197,10 +264,96 @@ input[type=number] {
 .detail-table td { padding: 10px 15px; color: #333; font-weight: 500; border-bottom: 1px solid #f0f0f0; }
 </style>
 
+<div id="manualAddModal" class="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div class="modal-box" style="background:#fff; border-radius:8px; width:650px; max-width:95%; max-height:90vh; display:flex; flex-direction:column; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+        <div style="padding:16px 24px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center; background:#fafafa; flex-shrink:0;">
+            <h3 style="margin:0; font-size:16px; color:#333;"><i class="ri-keyboard-line" style="color:#1890ff; margin-right:5px;"></i> 手动录入发票信息</h3>
+            <button onclick="document.getElementById('manualAddModal').style.display='none'" style="background:none; border:none; font-size:24px; color:#999; cursor:pointer;">&times;</button>
+        </div>
+        
+        <form id="manual-add-form" onsubmit="submitManualAdd(event)" style="display:flex; flex-direction:column; overflow:hidden;">
+            <div style="padding:24px; overflow-y:auto; flex:1;">
+                
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">发票文件 (支持图片/PDF，选填)</label>
+                    <input type="file" name="invoice_file" class="form-control" accept="image/*,.pdf" style="padding:6px; font-size:13px; border:1px dashed #d9d9d9;">
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div>
+                        <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">总金额 (含税) <span style="color:red;">*</span></label>
+                        <input type="number" step="0.01" name="amount" required class="form-control" placeholder="例如: 100.00" style="font-weight:bold; color:#f5222d; font-family:Verdana;">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">开票日期 <span style="color:red;">*</span></label>
+                        <input type="date" name="invoice_date" required class="form-control" value="<?php echo date('Y-m-d'); ?>">
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div>
+                        <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">发票类型 <span style="color:red;">*</span></label>
+                        <select name="invoice_special_type" class="form-control">
+                            <option value="普票">普票 (增值税普通发票)</option>
+                            <option value="专票">专票 (增值税专用发票)</option>
+                            <option value="全电发票">全电发票</option>
+                            <option value="打车小票">打车小票</option>
+                            <option value="火车票/高铁票">火车票/高铁票</option>
+                            <option value="行程单">飞机行程单</option>
+                            <option value="其他">其他票据</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">发票号码 / 订单号</label>
+                        <input type="text" name="invoice_number" class="form-control" placeholder="选填">
+                    </div>
+                </div>
+
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">购买方名称 (您的公司抬头)</label>
+                    <input type="text" name="buyer_name" class="form-control" placeholder="例如: 海科科技有限公司 (高铁票等可不填)">
+                </div>
+
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">销售方名称</label>
+                    <input type="text" name="seller_name" class="form-control" placeholder="开出该发票的商家名称 (选填)">
+                </div>
+                
+                <div style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">开票内容 / 事项明细</label>
+                    <input type="text" name="invoice_detail" class="form-control" placeholder="例如: *餐饮服务*餐费、办公用品等">
+                </div>
+                
+                <div style="background:#f9f9f9; padding:12px; border-radius:6px; border:1px solid #eee;">
+                    <div style="font-size:12px; color:#999; margin-bottom:10px;"><i class="ri-information-line"></i> 财务专用字段 (无需求可不填)</div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div>
+                            <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">税前金额 (不含税)</label>
+                            <input type="number" step="0.01" name="pre_tax_amount" class="form-control" placeholder="0.00">
+                        </div>
+                        <div>
+                            <label style="display:block; margin-bottom:6px; color:#555; font-size:13px;">税额</label>
+                            <input type="number" step="0.01" name="tax_amount" class="form-control" placeholder="0.00">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div style="padding:16px 24px; border-top:1px solid #f0f0f0; background:#fafafa; text-align:right; flex-shrink:0;">
+                <button type="button" onclick="document.getElementById('manualAddModal').style.display='none'" class="btn btn-ghost" style="margin-right:10px;">取消</button>
+                <button type="submit" id="btn-manual-submit" class="btn btn-primary"><i class="ri-save-line"></i> 确认录入入库</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="card" style="padding: 24px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
         <h3 style="margin:0;"><i class="ri-wallet-3-line"></i> 我的票夹</h3>
         <div style="display:flex; gap:10px;">
+            <button onclick="document.getElementById('manualAddModal').style.display='flex'" class="btn btn-ghost" style="border-radius: 6px; border: 1px solid #d9d9d9;">
+                <i class="ri-keyboard-line"></i> 手动录入
+            </button>
             <button id="btn-fetch-email" onclick="fetchEmailInvoices()" class="btn btn-secondary" style="border-radius: 6px; background: #fff; border: 1px solid #1890ff; color: #1890ff;">
                 <i class="ri-mail-download-line"></i> 收取邮件发票
             </button>
@@ -233,6 +386,9 @@ input[type=number] {
             </span>
         </div>
         <div style="display:flex; gap:10px;">
+            <?php if($filter == 'unused' || $filter == 'all'): ?>
+                <button onclick="openGiftModal()" class="btn btn-sm" style="background:#f6ffed; color:#52c41a; border:1px solid #b7eb8f;"><i class="ri-gift-line"></i> 赠送发票</button>
+            <?php endif; ?>
             <button onclick="batchDownload()" class="btn btn-primary btn-sm" style="background:#1890ff; border-color:#1890ff;"><i class="ri-download-2-line"></i> 打包下载</button>
             <?php if($filter == 'unused' || $filter == 'all'): ?>
                 <button onclick="batchDelete()" class="btn btn-ghost btn-sm" style="color:#ff4d4f; border-color:#ffa39e; background:#fff2f0;"><i class="ri-delete-bin-line"></i> 批量删除</button>
@@ -271,23 +427,24 @@ input[type=number] {
                         </select>
                     </th>
 
-                    <th width="140">总金额(¥)</th>
+                    <th width="120">总金额(¥)</th>
                     <th width="130">开票内容</th>
-                    <th width="130">日期 (开票/入库)</th>
+                    <th width="110">日期 (开票/入库)</th>
 
-                    <th width="90">
+                    <th width="80" style="text-align:center;">
                         <div style="margin-bottom: 2px; color: #555; font-size:13px;">发票类型</div>
-                        <select id="filter-sp" onchange="applyFilter()" style="padding:0px 2px; height:20px; border-radius:3px; border:1px solid #ccc; width:100%; max-width:85px; font-size:11px; outline:none; background:#fff; color:#333; cursor:pointer;">
+                        <select id="filter-sp" onchange="applyFilter()" style="padding:0px 2px; height:20px; border-radius:3px; border:1px solid #ccc; width:100%; max-width:75px; font-size:11px; outline:none; background:#fff; color:#333; cursor:pointer;">
                             <option value="">全部类型</option>
                             <?php foreach($all_sp_types as $s): ?>
                                 <option value="<?php echo h($s); ?>" <?php if($filter_sp==$s) echo 'selected'; ?>><?php echo h($s); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </th>
+                    <th width="70" style="text-align:center;">凑票标记</th>
                     <th width="100">报销分类</th>
                     <th width="80">状态</th>
                     <th width="120">备注</th>
-                    <th width="140">操作</th>
+                    <th width="140" style="text-align:center;">操作</th>
                 </tr>
             </thead>
             <tbody>
@@ -298,7 +455,8 @@ input[type=number] {
                     
                     $item['status_text'] = ($item['status']=='unused')?'未使用' : (($item['status']=='locked')?'审核中':'已报销');
                     $item['created_date'] = date('Y-m-d', strtotime($item['created_at']));
-                    $json_data = htmlspecialchars(json_encode($item, JSON_UNESCAPED_UNICODE));
+                    // ✨ 终极护盾：将所有单引号和双引号强制转义，绝不破坏 HTML 结构
+                    $json_data = htmlspecialchars(json_encode($item, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
                 ?>
                 <tr id="row-<?php echo $item['id']; ?>" class="<?php echo $item['status'] == 'unused' ? 'active-row' : 'locked-row'; ?>">
                     
@@ -325,11 +483,11 @@ input[type=number] {
                     <td>
                         <div style="display:flex; align-items:center; color:#1890ff;">
                             <span style="font-weight:bold; font-family:Verdana; font-size: 15px;">
-                                ¥<?php echo number_format($item['amount'], 2); ?>
+                                ¥<?php echo number_format(floatval($item['amount']), 2); ?>
                             </span>
                         </div>
                         <div class="text-sub" style="font-size:11px; transform:scale(0.9); transform-origin:left;">
-                            不含税: ¥<?php echo $item['pre_tax_amount']; ?>
+                            不含税: ¥<?php echo htmlspecialchars($item['pre_tax_amount'] ?: '0.00'); ?>
                         </div>
                     </td>
 
@@ -348,8 +506,18 @@ input[type=number] {
                         </div>
                     </td>
 
-                    <td>
+                    <td style="text-align:center;">
                         <span class="inv-tag <?php echo $tag_class; ?>"><?php echo h($item['invoice_special_type'] ?: '普票'); ?></span>
+                    </td>
+
+                    <td style="text-align:center;">
+                        <?php 
+                            $is_res = isset($item['is_reserved']) ? $item['is_reserved'] : 0;
+                            $res_color = $is_res ? '#faad14' : '#d9d9d9';
+                            $res_icon = $is_res ? 'ri-star-fill' : 'ri-star-line';
+                            $res_title = $is_res ? '已设为【专属】，禁止被自动凑票选中' : '当前为【闲置】，允许被自动凑票选中';
+                        ?>
+                        <i class="<?php echo $res_icon; ?>" style="color:<?php echo $res_color; ?>; cursor:pointer; font-size:18px; transition:0.2s;" title="<?php echo $res_title; ?>" onclick="toggleReserve(<?php echo $item['id']; ?>, this)"></i>
                     </td>
 
                     <td>
@@ -403,7 +571,7 @@ input[type=number] {
 
                 <?php if(empty($list)): ?>
                     <tr>
-                        <td colspan="11" style="text-align:center; padding:60px 20px; color:#bfbfbf;">
+                        <td colspan="12" style="text-align:center; padding:60px 20px; color:#bfbfbf;">
                             <i class="ri-inbox-archive-line" style="font-size:48px; color:#e8e8e8;"></i>
                             <p style="margin-top:10px;">当前分类下没有发票</p>
                         </td>
@@ -444,6 +612,36 @@ input[type=number] {
     </div>
 </div>
 
+<div id="giftModal" class="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div class="modal-box" style="background:#fff; border-radius:8px; width:450px; max-width:90%; box-shadow: 0 10px 25px rgba(0,0,0,0.2); overflow:hidden;">
+        <div style="padding:16px 24px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center; background:#fafafa;">
+            <h3 style="margin:0; font-size:16px; color:#333;"><i class="ri-gift-line" style="color:#52c41a; margin-right:5px;"></i> 赠送发票给同事</h3>
+            <button onclick="document.getElementById('giftModal').style.display='none'" style="background:none; border:none; font-size:24px; color:#999; cursor:pointer;">&times;</button>
+        </div>
+        <div style="padding:24px;">
+            <div style="margin-bottom:15px; font-size:14px; color:#555; background:#f6ffed; border:1px solid #b7eb8f; padding:10px; border-radius:6px;">
+                即将赠送 <strong id="gift-count-display" style="color:#52c41a; font-size:16px;">0</strong> 张发票，总金额: <strong id="gift-amount-display" style="color:#52c41a; font-size:16px; font-family:Verdana;">¥0.00</strong>
+            </div>
+            
+            <div style="margin-bottom:10px; font-weight:bold; color:#333;">请选择接收人：</div>
+            <select id="gift-target-user" class="form-control" style="width:100%; height:40px; font-size:14px; border:2px solid #52c41a;">
+                <option value="">-- 点击选择同事 --</option>
+                <?php foreach($all_other_users as $u): ?>
+                    <option value="<?php echo $u['id']; ?>"><?php echo h($u['realname']); ?> (<?php echo h($u['username']); ?>)</option>
+                <?php endforeach; ?>
+            </select>
+            
+            <div style="margin-top:12px; font-size:12px; color:#999; line-height:1.5;">
+                <i class="ri-information-line"></i> 提示：赠送成功后，这些发票将瞬间从您的票夹中移除并转移给对方。此操作不可逆（除非对方再赠送还给您）。
+            </div>
+        </div>
+        <div style="padding:16px 24px; border-top:1px solid #f0f0f0; background:#fafafa; text-align:right;">
+            <button onclick="document.getElementById('giftModal').style.display='none'" class="btn btn-ghost" style="margin-right:10px;">取消</button>
+            <button onclick="confirmGift(this)" class="btn btn-primary" style="background:#52c41a; border-color:#52c41a;"><i class="ri-send-plane-fill"></i> 确认赠送</button>
+        </div>
+    </div>
+</div>
+
 <script>
 // --- ✨ 新增：多选与统计逻辑 ---
 function toggleAll(source) {
@@ -464,6 +662,31 @@ function calcSelected() {
     
     document.getElementById('selected-amount-display').innerText = '¥' + total.toFixed(2);
     document.getElementById('selected-count-display').innerText = count;
+}
+
+function toggleReserve(id, el) {
+    let data = new FormData();
+    data.append('action', 'toggle_reserve');
+    data.append('id', id);
+    
+    fetch('invoice_wallet.php', { method: 'POST', body: data })
+    .then(res => res.text())
+    .then(text => { 
+        // ✨ 改用 includes('ok')，不管后台有没有杂音，只要包含 ok 就立刻变色！
+        if(text.includes('ok')) {
+            if (el.classList.contains('ri-star-fill')) {
+                el.classList.remove('ri-star-fill');
+                el.classList.add('ri-star-line');
+                el.style.color = '#d9d9d9';
+                el.title = '当前为【闲置】，允许被自动凑票选中';
+            } else {
+                el.classList.remove('ri-star-line');
+                el.classList.add('ri-star-fill');
+                el.style.color = '#faad14';
+                el.title = '已设为【专属】，禁止被自动凑票选中';
+            }
+        } 
+    });
 }
 
 // 批量打包下载
@@ -519,6 +742,58 @@ function batchDelete() {
     });
 }
 
+// ✨ 唤起赠送弹窗
+function openGiftModal() {
+    let checks = document.querySelectorAll('.invoice-checkbox:checked');
+    if(checks.length === 0) return alert('请先勾选需要赠送的发票！');
+
+    // 容错检查：防止误选了已被锁定或已报销的发票
+    let hasInvalid = false;
+    checks.forEach(cb => {
+        let tr = cb.closest('tr');
+        if(!tr.classList.contains('active-row')) hasInvalid = true; 
+    });
+    if(hasInvalid) return alert('⚠️ 只能赠送“未使用”的发票！请取消勾选正在审核中或已报销的发票。');
+
+    // 把当前已选金额和张数同步到弹窗里
+    document.getElementById('gift-count-display').innerText = document.getElementById('selected-count-display').innerText;
+    document.getElementById('gift-amount-display').innerText = document.getElementById('selected-amount-display').innerText;
+    
+    document.getElementById('gift-target-user').value = ''; // 重置下拉框
+    document.getElementById('giftModal').style.display = 'flex';
+}
+
+// ✨ 确认赠送发票
+function confirmGift(btn) {
+    let targetUid = document.getElementById('gift-target-user').value;
+    if(!targetUid) return alert('请选择接收发票的同事！');
+
+    let ids = Array.from(document.querySelectorAll('.invoice-checkbox:checked')).map(cb => cb.value);
+    if(ids.length === 0) return alert('未选择任何发票');
+
+    let oldText = btn.innerHTML;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 赠送中...';
+    btn.disabled = true;
+
+    let data = new FormData();
+    data.append('action', 'gift_invoices');
+    data.append('ids', ids.join(','));
+    data.append('target_uid', targetUid);
+
+    fetch('invoice_wallet.php', { method: 'POST', body: data })
+    .then(res => res.text())
+    .then(text => {
+        if(text.includes('ok')) {
+            alert('🎉 赠送成功！发票已移交至对方票夹。');
+            location.reload();
+        } else {
+            alert('赠送失败，请检查网络后重试。');
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+        }
+    });
+}
+
 // --- 拖拽上传监听事件 ---
 document.addEventListener('dragover', function(e) {
     e.preventDefault();
@@ -563,8 +838,8 @@ async function fetchEmailInvoices() {
     let btn = document.getElementById('btn-fetch-email');
     let oldHTML = btn.innerHTML;
     
-    // UI 变化：显示正在连接邮箱
-    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 正在连接邮箱...';
+    // UI 变化：显示正在连接邮箱与解析链接
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 正在收取邮件并解析发票链接...';
     btn.disabled = true;
 
     try {
@@ -725,4 +1000,31 @@ function openDetail(data) {
 
     document.getElementById('invoiceDetailModal').style.display = 'flex';
 }
+
+// ✨ 手动录入发票提交逻辑
+function submitManualAdd(e) {
+    e.preventDefault();
+    let form = document.getElementById('manual-add-form');
+    let data = new FormData(form);
+    data.append('action', 'manual_add');
+
+    let btn = document.getElementById('btn-manual-submit');
+    let oldText = btn.innerHTML;
+    btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 正在入库...';
+    btn.disabled = true;
+
+    fetch('invoice_wallet.php', { method: 'POST', body: data })
+    .then(res => res.text())
+    .then(text => {
+        if(text.includes('ok')) {
+            alert('🎉 手动录入成功！');
+            location.reload();
+        } else {
+            alert('录入失败，请检查填写内容或重试。');
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+        }
+    });
+}
+
 </script>

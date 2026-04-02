@@ -58,6 +58,8 @@ try {
     if (!in_array('travel_start', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travel_start DATE");
     if (!in_array('travel_end', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travel_end DATE");
     if (!in_array('travel_days', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN travel_days REAL DEFAULT 0");
+    // 新增：让报销明细记住对应的记账本 ID
+    if (!in_array('bookkeeping_id', $cols)) $pdo->exec("ALTER TABLE items ADD COLUMN bookkeeping_id INTEGER DEFAULT 0");
 
     // 用户表升级
     $u_cols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_COLUMN, 1);
@@ -190,5 +192,25 @@ if (!in_array('buyer_name', $inv_cols)) $pdo->exec("ALTER TABLE invoices ADD COL
 if (!in_array('tax_amount', $inv_cols)) $pdo->exec("ALTER TABLE invoices ADD COLUMN tax_amount DECIMAL(10,2) DEFAULT 0.00"); // 税额
 if (!in_array('pre_tax_amount', $inv_cols)) $pdo->exec("ALTER TABLE invoices ADD COLUMN pre_tax_amount DECIMAL(10,2) DEFAULT 0.00"); // 税前金额 (不含税)
 if (!in_array('invoice_detail', $inv_cols)) $pdo->exec("ALTER TABLE invoices ADD COLUMN invoice_detail TEXT DEFAULT ''"); // 开票内容 (*餐饮费*餐费等)
+if (!in_array('is_reserved', $inv_cols)) $pdo->exec("ALTER TABLE invoices ADD COLUMN is_reserved INTEGER DEFAULT 0"); // 新增: 0=闲置可凑, 1=专属禁凑
 if (!in_array('invoice_special_type', $inv_cols)) $pdo->exec("ALTER TABLE invoices ADD COLUMN invoice_special_type TEXT DEFAULT '普票'"); // 专票/普票/电票
+// ==========================================
+// ✨ 个人记账本表 (bookkeeping)
+// ==========================================
+$pdo->exec("CREATE TABLE IF NOT EXISTS bookkeeping (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    type TEXT DEFAULT '支出',       -- 类型：'支出'(员工垫付) 或 '借款'(向公司借入备用金)
+    amount DECIMAL(10,2) DEFAULT 0.00,
+    record_date DATE,             -- 消费/借款日期
+    item_name TEXT,               -- 事项明细 (如: 买A4纸、打车费)
+    status TEXT DEFAULT '未报销',  -- 状态：'未报销' 或 '已报销' (仅针对支出)
+    note TEXT,                    -- 补充备注
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+// ✨ 自动升级：为记账本加入“报销主体”和“所属项目”
+$bk_cols = $pdo->query("PRAGMA table_info(bookkeeping)")->fetchAll(PDO::FETCH_COLUMN, 1);
+if (!in_array('company', $bk_cols)) $pdo->exec("ALTER TABLE bookkeeping ADD COLUMN company TEXT DEFAULT '默认公司'");
+if (!in_array('project_name', $bk_cols)) $pdo->exec("ALTER TABLE bookkeeping ADD COLUMN project_name TEXT DEFAULT ''");
+if (!in_array('wallet_ids', $bk_cols)) $pdo->exec("ALTER TABLE bookkeeping ADD COLUMN wallet_ids TEXT DEFAULT ''"); // 新增：绑定的发票ID集合
 ?>

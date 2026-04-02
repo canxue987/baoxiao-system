@@ -7,11 +7,11 @@ const typeData = {
 
 let globalRowId = 0;
 
-// --- 1. 增加公司区块 ---
-function addCompanySection() {
-    const sectionId = Date.now();
+// --- 1. 增加公司区块 (智能增强版) ---
+function addCompanySection(defaultCompany = null, autoAddRow = true) {
+    const sectionId = Date.now() + Math.floor(Math.random() * 1000); // 确保并发调用ID唯一
     const container = document.getElementById('sections-container');
-    if(!container) return;
+    if(!container) return null;
 
     let optionsHtml = '';
     if (typeof GLOBAL_COMPANIES !== 'undefined' && GLOBAL_COMPANIES.length > 0) {
@@ -33,15 +33,28 @@ function addCompanySection() {
             </div>
             <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('section-${sectionId}').remove()"><i class="ri-delete-bin-line"></i> 删除此公司栏</button>
         </div>
-        <div class="company-body" id="body-${sectionId}">
-            </div>
+        <div class="company-body" id="body-${sectionId}"></div>
         <div style="padding: 12px 24px; background: #fafafa; border-top: 1px solid #f0f0f0;">
             <button type="button" class="btn btn-ghost btn-sm" onclick="addRow('${sectionId}')"><i class="ri-add-line"></i> 增加明细行</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="openBookkeepingModal('${sectionId}')" style="color:#d46b08; border-color:#ffe58f; background:#fffbe6; margin-left:10px;"><i class="ri-book-read-line"></i> 从记账本导入</button>
         </div>
     </div>`;
     
     container.insertAdjacentHTML('beforeend', html);
-    addRow(sectionId);
+    
+    // 如果指定了公司，自动选中
+    if (defaultCompany) {
+        const sel = document.getElementById(`comp-select-${sectionId}`);
+        if (sel) {
+            let exists = Array.from(sel.options).some(opt => opt.value === defaultCompany);
+            if (!exists) sel.add(new Option(defaultCompany, defaultCompany));
+            sel.value = defaultCompany;
+        }
+    }
+
+    if (autoAddRow) addRow(sectionId);
+    
+    return sectionId; // 返回生成的 ID 供导入功能调用
 }
 
 // --- 2. 增加明细行 (核心修改：增加票夹按钮) ---
@@ -100,7 +113,8 @@ function addRow(sectionId) {
 
         <div class="input-group" style="flex: 1; min-width: 150px;">
             <span class="input-label">备注说明</span>
-            <input type="text" name="items[${globalRowId}][note]" placeholder="事由" required style="height:32px;">
+            <input type="text" name="items[${globalRowId}][note]" id="note-${globalRowId}" placeholder="事由" required style="height:32px;">
+            <input type="hidden" name="items[${globalRowId}][bookkeeping_id]" id="bk-id-${globalRowId}" value="0">
         </div>
 
         <div class="input-group" style="width: 230px; position:relative; flex:none;">
@@ -458,5 +472,35 @@ document.addEventListener('DOMContentLoaded', function() {
 function approveAll(batchId, userId) {
     if (confirm("确定一键通过本页所有【待审核】单据吗？")) {
         location.href = `action.php?action=approve_all&bid=${batchId}&uid=${userId}`;
+    }
+}
+
+let currentBkSectionId = null;
+function openBookkeepingModal(sectionId) {
+    currentBkSectionId = sectionId;
+    
+    // 检查当前页面是否有“选择员工”的下拉框 (判断是否在代填页面)
+    let userSelect = document.querySelector('select[name="target_user_id"]');
+    
+    if (userSelect) {
+        // --- 管理员代填模式 ---
+        let targetUid = userSelect.value;
+        if (!targetUid) {
+            alert("⚠️ 请先在页面最上方选择您要帮哪位员工填报！");
+            userSelect.focus();
+            userSelect.parentElement.style.backgroundColor = '#fff1f0';
+            setTimeout(() => userSelect.parentElement.style.backgroundColor = '#e6f7ff', 800);
+            return;
+        }
+        let targetUserName = userSelect.options[userSelect.selectedIndex].text.split(' ')[0];
+        
+        if (typeof showBkModal === 'function') {
+            showBkModal(targetUid, targetUserName);
+        }
+    } else {
+        // --- 普通员工自己填报模式 ---
+        if (typeof showBkModal === 'function') {
+            showBkModal();
+        }
     }
 }

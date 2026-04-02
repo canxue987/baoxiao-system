@@ -29,7 +29,7 @@ if (file_exists($sys_file)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($sys_config['name']); ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link href="https://cdn.staticfile.net/remixicon/3.5.0/remixicon.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
     <script>
         const GLOBAL_COMPANIES = <?php echo json_encode($sys_companies); ?>;
@@ -61,6 +61,10 @@ if (file_exists($sys_file)) {
         
         <a href="invoice_wallet.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF'])=='invoice_wallet.php'?'active':''; ?>">
             <i class="ri-wallet-3-line"></i> 我的票夹
+        </a>
+
+        <a href="bookkeeping.php" class="nav-item <?php echo $current_page=='bookkeeping.php'?'active':''; ?>">
+            <i class="ri-book-2-line"></i> 我的记账本
         </a>
         
         <?php if($_SESSION['role'] == 'admin'): ?>

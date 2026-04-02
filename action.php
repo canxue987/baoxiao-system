@@ -135,13 +135,28 @@ if ($action == 'add_items' && $_SERVER['REQUEST_METHOD'] == 'POST') {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         $stmt = $pdo->prepare($sql);
+        $bk_id = isset($item['bookkeeping_id']) ? intval($item['bookkeeping_id']) : 0;
+        
+        $sql = "INSERT INTO items (
+            user_id, batch_id, company, category, expense_date, amount, invoice_amount, 
+            type, note, is_substitute, invoice_path, support_path,
+            project_name, travel_reason, travelers, travel_start, travel_end, travel_days, bookkeeping_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+        $stmt = $pdo->prepare($sql);
         $stmt->execute([
             $final_user_id, $batch_id, $company, $item['category'], 
             $item['date'], $amount, $inv_amt, $item['type'], $item['note'], $is_sub, 
             json_encode($inv_paths), json_encode($sup_paths),
             $item['project_name']??'', $item['travel_reason']??'', $item['travelers']??'', 
-            $item['travel_start']??null, $item['travel_end']??null, floatval($item['travel_days']??0)
+            $item['travel_start']??null, $item['travel_end']??null, floatval($item['travel_days']??0),
+            $bk_id
         ]);
+
+        // ✨ 新增：提交后，马上将记账本里的账单变更为“已报销”
+        if ($bk_id > 0) {
+            $pdo->exec("UPDATE bookkeeping SET status='已报销' WHERE id=$bk_id");
+        }
     }
     
     if ($_SESSION['role'] == 'admin' && isset($_POST['target_user_id'])) {
@@ -154,7 +169,7 @@ if ($action == 'add_items' && $_SERVER['REQUEST_METHOD'] == 'POST') {
 // --- 2. 删除单条 (撤回/删除重填) ---
 if ($action == 'delete') {
     $id = $_GET['id'];
-    $stmt = $pdo->prepare("SELECT invoice_path, support_path, user_id, status FROM items WHERE id=?");
+    $stmt = $pdo->prepare("SELECT invoice_path, support_path, user_id, status, bookkeeping_id FROM items WHERE id=?");
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     
@@ -174,8 +189,13 @@ if ($action == 'delete') {
             $sups = json_decode($row['support_path'] ?: '[]');
             foreach ($sups as $f) { if (file_exists($f)) unlink($f); }
             
+            // ✨ 修复点：撤回时，把记账本对应的那一笔账重新解放出来！
+            if (!empty($row['bookkeeping_id'])) {
+                $pdo->prepare("UPDATE bookkeeping SET status='未报销' WHERE id=?")->execute([$row['bookkeeping_id']]);
+            }
             // 删记录
             $pdo->prepare("DELETE FROM items WHERE id=?")->execute([$id]);
+
         }
     }
     header("Location: " . ($_SERVER['HTTP_REFERER'] ?? 'index.php'));
@@ -208,15 +228,22 @@ if (isset($_GET['del_batch']) && $_SESSION['role'] == 'admin') {
     $bid = $_GET['del_batch'];
     
     // ✨ 修复点 3：删除档期时，将该档期内所有的票夹发票打回“未使用”状态
-    $stmt = $pdo->prepare("SELECT invoice_path FROM items WHERE batch_id=?");
+    $stmt = $pdo->prepare("SELECT invoice_path, bookkeeping_id FROM items WHERE batch_id=?");
     $stmt->execute([$bid]);
     $all_w_ids = [];
+    $all_bk_ids = []; // 新增：收集被删除档期内的记账本ID
     while($row = $stmt->fetch()) {
         $all_w_ids = array_merge($all_w_ids, getWalletIdsFromPaths($row['invoice_path']));
+        if (!empty($row['bookkeeping_id'])) $all_bk_ids[] = $row['bookkeeping_id'];
     }
     if (!empty($all_w_ids)) {
         $w_in = implode(',', array_unique($all_w_ids));
         $pdo->exec("UPDATE invoices SET status='unused' WHERE id IN ($w_in)");
+    }
+    // ✨ 新增：集体打回为未报销
+    if (!empty($all_bk_ids)) {
+        $bk_in = implode(',', array_unique($all_bk_ids));
+        $pdo->exec("UPDATE bookkeeping SET status='未报销' WHERE id IN ($bk_in)");
     }
 
     $pdo->prepare("DELETE FROM items WHERE batch_id=?")->execute([$bid]);
