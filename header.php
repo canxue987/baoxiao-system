@@ -81,6 +81,10 @@ if (file_exists($sys_file)) {
             <a href="users.php" class="nav-item <?php echo $current_page=='users.php'?'active':''; ?>">
                 <i class="ri-team-line"></i> 人员管理
             </a>
+
+            <a href="admin_cleanup_wallet.php" class="nav-item <?php echo $current_page=='admin_cleanup_wallet.php'?'active':''; ?>">
+                <i class="ri-broom-line"></i> 票夹数据清理
+            </a>
         <?php endif; ?>
 
         <div style="font-size:12px; color:#999; margin: 15px 0 5px 15px;">账户</div>

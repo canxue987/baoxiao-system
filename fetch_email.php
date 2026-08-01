@@ -62,7 +62,8 @@ function scrapeInvoiceFromUrl($url, $temp_dir) {
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36');
     curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     $content = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
@@ -141,7 +142,8 @@ function scrapeInvoiceFromUrl($url, $temp_dir) {
             curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt($ch2, CURLOPT_USERAGENT, 'Mozilla/5.0');
-            curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, 2);
             $pdf_content = curl_exec($ch2);
             curl_close($ch2);
             

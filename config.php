@@ -6,6 +6,19 @@ date_default_timezone_set('PRC');
 $db_dir = __DIR__ . '/db';
 $db_file = $db_dir . '/reimburse.db';
 
+function resolveProjectUploadPath($path) {
+    if (!is_string($path) || strpos($path, 'uploads/') !== 0 || strpos($path, '..') !== false || strpos($path, '\\') !== false) {
+        return false;
+    }
+
+    $uploadRoot = realpath(__DIR__ . DIRECTORY_SEPARATOR . 'uploads');
+    $candidate = realpath(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path));
+    if ($uploadRoot === false || $candidate === false) return false;
+
+    $rootPrefix = rtrim($uploadRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    return strncasecmp($candidate, $rootPrefix, strlen($rootPrefix)) === 0 ? $candidate : false;
+}
+
 if (!file_exists($db_dir)) mkdir($db_dir, 0777, true);
 
 try {
@@ -213,4 +226,5 @@ $bk_cols = $pdo->query("PRAGMA table_info(bookkeeping)")->fetchAll(PDO::FETCH_CO
 if (!in_array('company', $bk_cols)) $pdo->exec("ALTER TABLE bookkeeping ADD COLUMN company TEXT DEFAULT '默认公司'");
 if (!in_array('project_name', $bk_cols)) $pdo->exec("ALTER TABLE bookkeeping ADD COLUMN project_name TEXT DEFAULT ''");
 if (!in_array('wallet_ids', $bk_cols)) $pdo->exec("ALTER TABLE bookkeeping ADD COLUMN wallet_ids TEXT DEFAULT ''"); // 新增：绑定的发票ID集合
+if (!in_array('support_path', $bk_cols)) $pdo->exec("ALTER TABLE bookkeeping ADD COLUMN support_path TEXT DEFAULT ''"); // 新增：辅证图片路径（JSON数组）
 ?>

@@ -356,7 +356,36 @@ let currentY = 0;
 let isDraggingImg = false;
 let startX, startY;
 
+function escapePreviewHtml(value) {
+    return String(value).replace(/[&<>"']/g, function(character) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[character];
+    });
+}
+
+function normalizePreviewUrl(value) {
+    if (typeof value !== 'string' || value === '' || value.includes('\\')) return null;
+
+    try {
+        const resolved = new URL(value, window.location.href);
+        const uploadsRoot = new URL('uploads/', window.location.href);
+        const decodedPath = decodeURIComponent(resolved.pathname);
+        if (decodedPath.split('/').includes('..')) return null;
+        if (resolved.origin !== window.location.origin || !decodedPath.startsWith(decodeURIComponent(uploadsRoot.pathname))) return null;
+        return resolved.href;
+    } catch (error) {
+        return null;
+    }
+}
+
 function previewFile(url, type) {
+    const safeUrl = normalizePreviewUrl(url);
+    if (!safeUrl) return;
     const modal = document.getElementById('preview-modal');
     const body = document.getElementById('modal-body');
     const title = document.getElementById('modal-title');
@@ -372,10 +401,10 @@ function previewFile(url, type) {
     
     if (type === 'pdf') {
         title.innerHTML = "<i class='ri-file-pdf-line'></i> PDF预览";
-        body.innerHTML = `<iframe src="${url}" class="pdf-viewer"></iframe>`;
+        body.innerHTML = `<iframe src="${escapePreviewHtml(safeUrl)}" class="pdf-viewer"></iframe>`;
     } else {
         title.innerHTML = "<i class='ri-image-line'></i> 图片预览";
-        body.innerHTML = `<img src="${url}" class="img-viewer" id="target-img" draggable="false">`;
+        body.innerHTML = `<img src="${escapePreviewHtml(safeUrl)}" class="img-viewer" id="target-img" draggable="false">`;
         
         const img = document.getElementById('target-img');
         
@@ -468,13 +497,6 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 });
 
-// 后台一键通过
-function approveAll(batchId, userId) {
-    if (confirm("确定一键通过本页所有【待审核】单据吗？")) {
-        location.href = `action.php?action=approve_all&bid=${batchId}&uid=${userId}`;
-    }
-}
-
 let currentBkSectionId = null;
 function openBookkeepingModal(sectionId) {
     currentBkSectionId = sectionId;
@@ -503,4 +525,71 @@ function openBookkeepingModal(sectionId) {
             showBkModal();
         }
     }
+}
+
+// ==========================================
+// ✨ 提交确认 + 防重复提交
+// ==========================================
+let _submitLocked = false;
+
+function confirmSubmit(form) {
+    // 1. 防重复提交锁
+    if (_submitLocked) {
+        return false;
+    }
+    
+    // 2. 数据有效性校验：至少有一条明细行
+    const rows = document.querySelectorAll('.row-input');
+    if (rows.length === 0) {
+        alert('⚠️ 请至少添加一条报销明细后再提交！');
+        return false;
+    }
+    
+    // 3. 逐行校验金额
+    let hasValidRow = false;
+    for (let i = 0; i < rows.length; i++) {
+        const amtInput = rows[i].querySelector('input[name*="[amount]"]');
+        if (amtInput) {
+            const amt = parseFloat(amtInput.value);
+            if (isNaN(amt) || amt <= 0) {
+                alert('⚠️ 第 ' + (i + 1) + ' 行金额无效，请填写大于 0 的金额！');
+                amtInput.focus();
+                return false;
+            }
+            hasValidRow = true;
+        }
+    }
+    
+    if (!hasValidRow) {
+        alert('⚠️ 请至少填写一条有效的报销金额！');
+        return false;
+    }
+    
+    // 4. 确认提示
+    if (!confirm('确定要提交报销单吗？\n\n提交后将无法修改，请仔细核对金额和附件。')) {
+        return false;
+    }
+    
+    // 5. 锁定并禁用提交按钮
+    _submitLocked = true;
+    const btn = document.getElementById('submitBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.style.cursor = 'not-allowed';
+        btn.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> 正在提交...';
+    }
+    
+    // 6. 设置超时解锁（30秒后如果页面还没跳转，恢复按钮）
+    setTimeout(function() {
+        _submitLocked = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.innerHTML = '<i class="ri-send-plane-fill"></i> 提交报销单';
+        }
+    }, 30000);
+    
+    return true;
 }

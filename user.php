@@ -30,15 +30,16 @@ include 'header.php';
             当前档期：<span style="color:var(--primary-color)"><?php echo h($current_batch['name']); ?></span>
         </h3>
         
-        <form action="action.php" method="post" enctype="multipart/form-data">
+        <form action="action.php" method="post" enctype="multipart/form-data" onsubmit="return confirmSubmit(this)">
             <input type="hidden" name="action" value="add_items">
             <input type="hidden" name="batch_id" value="<?php echo $current_batch['id']; ?>">
 
             <div id="sections-container"></div>
             
             <div style="margin-top:24px; padding-top:24px; border-top:1px solid #f0f0f0; text-align:right;">
+                <button type="button" class="btn btn-ghost" onclick="startSubstituteSplit()" style="margin-right:12px; color:#faad14; border:1px solid #ffe58f; background:#fffbe6;"><i class="ri-blaze-line"></i> 智能替票拆分</button>
                 <button type="button" class="btn btn-ghost" onclick="addCompanySection()" style="margin-right:12px;"><i class="ri-building-2-line"></i> 增加公司主体</button>
-                <button type="submit" class="btn btn-primary" style="padding: 10px 40px; font-size:16px; background:#0050b3;">
+                <button type="submit" id="submitBtn" class="btn btn-primary" style="padding: 10px 40px; font-size:16px; background:#0050b3;">
                     <i class="ri-send-plane-fill"></i> 提交报销单
                 </button>
             </div>
@@ -185,8 +186,16 @@ function selectFromWallet(btn, rowIndex) {
         currentActiveBadge = document.getElementById(`wallet-badge-${rowIndex}`);
         currentActiveRowId = rowIndex;
         
-        // 员工本人调用，不需要传 uid
-        openWalletModal();
+        // ✨ 获取当前行所属的公司主体
+        let companyName = '';
+        let rowDiv = document.getElementById('row-' + rowIndex);
+        if (rowDiv) {
+            let companyInput = rowDiv.querySelector('input[name*="[company]"]');
+            if (companyInput) companyName = companyInput.value;
+        }
+        
+        // 员工本人调用，不需要传 uid，但传入公司名用于过滤
+        openWalletModal(null, '', companyName);
     } else {
         console.error('无法找到 .input-group 容器，请检查 HTML 结构');
     }

@@ -105,7 +105,8 @@ try {
         // 数据映射
         $map = [
             'id'            => $item['id'],
-            'created_at'    => substr($item['created_at'], 0, 10),
+            // ✨ 修复：如果数据库里没有创建时间或者为空，直接返回空字符串，绝不让 PHP 崩溃
+            'created_at'    => substr((string)($item['created_at'] ?? ''), 0, 10),
             'date'          => $item['expense_date'], // 对应 ${date}
             'realname'      => $item['realname'],
             'department'    => $item['department'],

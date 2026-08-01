@@ -129,7 +129,8 @@ include 'header.php';
         </div>
 
         <?php
-            $stmt = $pdo->prepare("SELECT u.id, u.realname, COUNT(*) as cnt, SUM(amount) as total FROM items i LEFT JOIN users u ON i.user_id = u.id WHERE i.batch_id=? AND i.status!='rejected' GROUP BY u.id");
+            // ✨ 优化：在 SQL 中加上 pending_cnt 的统计，用来判断是否还有未审核的明细
+            $stmt = $pdo->prepare("SELECT u.id, u.realname, COUNT(*) as cnt, SUM(amount) as total, SUM(CASE WHEN i.status='pending' THEN 1 ELSE 0 END) as pending_cnt FROM items i LEFT JOIN users u ON i.user_id = u.id WHERE i.batch_id=? AND i.status!='rejected' GROUP BY u.id");
             $stmt->execute([$active_batch_id]);
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         ?>
@@ -141,7 +142,13 @@ include 'header.php';
                     <td><?php echo h($u['realname']); ?></td>
                     <td><?php echo $u['cnt']; ?> 笔</td>
                     <td style="font-weight:bold; color:#1890ff;">¥<?php echo number_format($u['total'], 2); ?></td>
-                    <td><span class="tag" style="background:#e6f7ff; color:#1890ff;">审核中</span></td>
+                    <td>
+                        <?php if($u['pending_cnt'] > 0): ?>
+                            <span class="tag" style="background:#e6f7ff; color:#1890ff; border:1px solid #91d5ff;">审核中</span>
+                        <?php else: ?>
+                            <span class="tag" style="background:#f6ffed; color:#52c41a; border:1px solid #b7eb8f;"><i class="ri-check-line"></i> 已通过</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <div style="display:flex; flex-direction:column; gap:8px;">
                             <div style="display:flex; gap:5px;">
@@ -287,9 +294,25 @@ include 'header.php';
     </div>
 
     <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <h4><i class="ri-file-search-line"></i> 原始单据审核</h4>
-            </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h4 style="margin:0;"><i class="ri-file-search-line"></i> 原始单据审核</h4>
+            
+            <?php
+                // ✨ 智能检测：看看该员工当前是否还有处于“审核中”的单据
+                $check_pending = $pdo->prepare("SELECT COUNT(*) FROM items WHERE batch_id=? AND user_id=? AND status='pending'");
+                $check_pending->execute([$active_batch_id, $view_user_id]);
+                $has_pending = $check_pending->fetchColumn() > 0;
+            ?>
+            
+            <?php if($has_pending): ?>
+                <a href="action.php?action=approve_all&bid=<?php echo $active_batch_id; ?>&uid=<?php echo $view_user_id; ?>" 
+                   class="btn btn-primary btn-sm" 
+                   onclick="return confirm('确定要一键通过该员工所有【待审核】的单据吗？')" 
+                   style="background:#52c41a; border-color:#52c41a; box-shadow: 0 2px 6px rgba(82,196,26,0.3);">
+                    <i class="ri-check-double-line"></i> 一键全部通过
+                </a>
+            <?php endif; ?>
+        </div>
 
         <table class="data-table">
             <thead><tr><th>公司</th><th>详情</th><th>金额(报/票)</th><th>备注</th><th>附件</th><th>操作</th></tr></thead>
@@ -341,22 +364,23 @@ include 'header.php';
                     <td>
                         <?php 
                         if($invs) { 
-                            echo "<div><i class='ri-coupon-2-line'></i> "; 
-                            foreach($invs as $k=>$v) {
-                                $ext = strtolower(pathinfo($v, PATHINFO_EXTENSION));
-                                $type = ($ext == 'pdf') ? 'pdf' : 'img';
-                                echo "<a href='javascript:;' onclick=\"previewFile('$v', '$type')\">[".($k+1)."]</a> "; 
-                            }
-                            echo "</div>"; 
+                            // 将所有发票路径打包成 JSON，并处理引号转义
+                            $invs_json = htmlspecialchars(json_encode($invs, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+                            echo "<div style='margin-bottom:6px;'>
+                                    <button onclick=\"previewGallery($invs_json, '发票')\" class='btn btn-ghost btn-sm' style='color:#1890ff; border:1px solid #91d5ff; background:#e6f7ff; font-size:12px; padding:4px 8px; width:100%; display:flex; justify-content:space-between; align-items:center;'>
+                                        <span><i class='ri-coupon-2-line'></i> 发票清单</span>
+                                        <span style='background:#1890ff; color:#fff; padding:0 6px; border-radius:10px; font-size:11px;'>" . count($invs) . "</span>
+                                    </button>
+                                  </div>"; 
                         }
                         if($sups) { 
-                            echo "<div><i class='ri-attachment-line'></i> "; 
-                            foreach($sups as $k=>$v) {
-                                $ext = strtolower(pathinfo($v, PATHINFO_EXTENSION));
-                                $type = ($ext == 'pdf') ? 'pdf' : 'img';
-                                echo "<a href='javascript:;' onclick=\"previewFile('$v', '$type')\" style='color:#52c41a'>[".($k+1)."]</a> "; 
-                            }
-                            echo "</div>"; 
+                            $sups_json = htmlspecialchars(json_encode($sups, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+                            echo "<div>
+                                    <button onclick=\"previewGallery($sups_json, '辅证')\" class='btn btn-ghost btn-sm' style='color:#52c41a; border:1px solid #b7eb8f; background:#f6ffed; font-size:12px; padding:4px 8px; width:100%; display:flex; justify-content:space-between; align-items:center;'>
+                                        <span><i class='ri-attachment-line'></i> 辅助证明</span>
+                                        <span style='background:#52c41a; color:#fff; padding:0 6px; border-radius:10px; font-size:11px;'>" . count($sups) . "</span>
+                                    </button>
+                                  </div>"; 
                         }
                         ?>
                     </td>
@@ -392,6 +416,17 @@ include 'header.php';
             <div class="modal-body" id="modal-body"></div>
         </div>
     </div>
+
+    <style>
+    /* ✨ 修复 PDF 内联预览冲突：当弹窗开启了 PDF 预览模式时，让外部 body 的滚动条消失 */
+    body:has(#preview-modal[style*="display: flex"]):has(embed) {
+        overflow: hidden !important;
+    }
+    /* 确保预览 Body 在切换模式时足够平滑 */
+    #modal-body {
+        transition: background 0.2s, padding 0.2s;
+    }
+    </style>
 
     <script>
     function reject(id, uid) {
@@ -433,6 +468,124 @@ include 'header.php';
         box.style.minHeight = '300px';
         box.style.maxHeight = '80%';
     }
+
+    // ✨ 终极版：长卷阅读模式 (无需任何点击，直接往下滚就能看完全部)
+    function previewGallery(files, titleName) {
+        const modal = document.getElementById('preview-modal');
+        const body = document.getElementById('modal-body');
+        const title = document.getElementById('modal-title');
+        const safeFiles = Array.isArray(files) ? files.map(normalizePreviewUrl).filter(Boolean) : [];
+        const safeTitle = escapePreviewHtml(titleName);
+        if (!safeFiles.length) return;
+        
+        title.innerHTML = `<i class='ri-slideshow-line' style='color:#1890ff;'></i> ${safeTitle}长卷预览 (${safeFiles.length}份)`;
+        
+        // 样式重置为长卷滚动模式
+        body.style.background = '#e2e5e9'; // 深灰底色，像专业的 PDF 阅读器
+        body.style.overflow = 'auto';
+        body.style.display = 'block';
+        body.style.padding = '20px';
+        
+        let html = '';
+        safeFiles.forEach((src, index) => {
+            let ext = src.split('.').pop().toLowerCase();
+            let type = (ext === 'pdf') ? 'pdf' : 'img';
+            let fileName = escapePreviewHtml(decodeURIComponent(src.substring(src.lastIndexOf('/') + 1)));
+            let safeSrc = escapePreviewHtml(src);
+            
+            html += `<div style="background: #fff; margin-bottom: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); overflow: hidden; border: 1px solid #ccc;">`;
+            
+            // 附件标题栏 (带一个备用的外链打开按钮)
+            html += `<div style="background: #f5f5f5; padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold; color: #333; font-size: 14px;">
+                            <i class="${type==='pdf'?'ri-file-pdf-line':'ri-image-line'}" style="color:${type==='pdf'?'#ff4d4f':'#52c41a'}; margin-right:5px;"></i>
+                            附件 ${index + 1} / ${safeFiles.length} : ${fileName}
+                        </span>
+                        <a href="${safeSrc}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm" style="font-size:12px; color:#1890ff; padding:2px 8px; border:1px solid #91d5ff; background:#e6f7ff; text-decoration:none;"><i class="ri-external-link-line"></i> 单独打开</a>
+                     </div>`;
+                     
+            // 附件内容区 (不再是缩略图，直接上原图/完整PDF)
+            if (type === 'pdf') {
+                // PDF 直接嵌入，给一个足够高的高度 (800px)
+                html += `<embed src="${safeSrc}" type="application/pdf" width="100%" height="800px" style="border:none; display:block;"></embed>`;
+            } else {
+                // 图片直接展示原大图，最大宽度不超过容器
+                html += `<div style="padding: 15px; display:flex; justify-content:center; background:#fafafa;">
+                            <img src="${safeSrc}" style="max-width: 100%; height: auto; object-fit: contain;">
+                         </div>`;
+            }
+            
+            html += `</div>`;
+        });
+        
+        // 底部提示
+        html += `<div style="text-align:center; color:#999; padding-bottom:20px;">— 到底啦 —</div>`;
+        
+        body.innerHTML = html;
+        modal.style.display = 'flex';
+        
+        // 放大画廊面板尺寸，为了看 PDF 和大图更加舒服
+        const box = document.getElementById('modal-box');
+        box.style.width = '900px'; 
+        box.style.height = 'auto';
+        box.style.maxHeight = '92vh'; // 占据屏幕的大部分高度
+    }
+
+    // ================== ✨ 全新的“内联查看器”引擎 ==================
+    function viewFileInline(src, type) {
+        const safeUrl = normalizePreviewUrl(src);
+        if (!safeUrl) return;
+        const body = document.getElementById('modal-body');
+        const title = document.getElementById('modal-title');
+        
+        // 1. 将弹窗标题变更为“查看附件”
+        let cleanName = escapePreviewHtml(decodeURIComponent(safeUrl.substring(safeUrl.lastIndexOf('/') + 1)));
+        let safeSrc = escapePreviewHtml(safeUrl);
+        title.innerHTML = `
+            <div style="display:flex; align-items:center; width:100%; justify-content:space-between; width:740px;">
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:400px;"><i class='ri-eye-line' style='color:#52c41a;'></i> 附件详情: ${cleanName}</span>
+                <button onclick="previewGallery(window.currentPreviewGalleryFiles, window.currentPreviewTitleName)" class="btn btn-ghost btn-sm" style="border:1px solid #ddd; padding:2px 8px; font-size:12px; color:#666; cursor:pointer; background:#f9f9f9;"><i class="ri-arrow-left-line"></i> 返回清单</button>
+            </div>
+        `;
+        
+        // 2. 重置 Body 样式，变为全屏撑开模式
+        body.style.background = '#000';      // 图片看大图底色变黑
+        body.style.overflow = 'hidden';     // 大图模式不让外面有滚动条
+        body.style.display = 'block';
+        body.style.padding = '0';
+        
+        let viewerHtml = '';
+        if (type === 'pdf') {
+             body.style.background = '#525659'; // PDF 阅读器底色
+             // ✨ PDF 核心解决方案：直接在弹窗内塞入一个 full-size 的 PDF 嵌入对象
+             viewerHtml = `<embed src="${safeSrc}" type="application/pdf" width="100%" height="calc(85vh - 56px)" style="border:none;"></embed>`;
+        } else {
+             // ✨ 图片大图解决方案：居中显示大图，允许点击关闭或滑轮缩放
+             viewerHtml = `<div id="imgViewer" style="width:100%; height:calc(85vh - 56px); display:flex; align-items:center; justify-content:center; overflow:auto; cursor:zoom-out;" onclick="previewGallery(window.currentPreviewGalleryFiles, window.currentPreviewTitleName)">
+                                <img src="${safeSrc}" style="max-width:100%; max-height:100%; object-fit:contain; border:2px solid #333; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+                            </div>`;
+        }
+        
+        body.innerHTML = viewerHtml;
+        
+        // 如果是图片，尝试注入一个滚轮缩放的小体验（可选，防大票据看不清）
+        if(type !== 'pdf'){
+            setTimeout(() => {
+                const imgViewer = document.getElementById('imgViewer');
+                const img = imgViewer.querySelector('img');
+                imgViewer.onwheel = function(e){
+                    e.preventDefault();
+                    let scale = parseFloat(img.getAttribute('data-scale') || 1);
+                    if(e.deltaY < 0) scale += 0.1; // 放大
+                    else scale = Math.max(0.3, scale - 0.1); // 缩小
+                    img.style.maxWidth = (scale * 100) + '%';
+                    img.style.maxHeight = (scale * 100) + '%';
+                    img.setAttribute('data-scale', scale);
+                }
+            }, 100);
+        }
+    }
+    
     </script>
 
 <?php endif; ?>

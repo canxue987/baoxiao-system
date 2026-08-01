@@ -7,6 +7,62 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+const BOOKKEEPING_MAX_UPLOAD_BYTES = 10485760;
+
+function bookkeepingSupportRoot($uid) {
+    return __DIR__ . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'bookkeeping' . DIRECTORY_SEPARATOR . (int)$uid;
+}
+
+function resolveBookkeepingSupportPath($path, $uid) {
+    $prefix = 'uploads/bookkeeping/' . (int)$uid . '/';
+    if (!is_string($path) || strpos($path, $prefix) !== 0 || strpos($path, '..') !== false || strpos($path, '\\') !== false) {
+        return false;
+    }
+
+    $root = realpath(bookkeepingSupportRoot($uid));
+    $candidate = realpath(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path));
+    if ($root === false || $candidate === false) return false;
+
+    $rootPrefix = rtrim($root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    return strncasecmp($candidate, $rootPrefix, strlen($rootPrefix)) === 0 ? $candidate : false;
+}
+
+function storeBookkeepingSupportFiles($uid) {
+    if (empty($_FILES['support_files']) || !is_array($_FILES['support_files']['name'] ?? null)) return [];
+    if (!class_exists('finfo')) return false;
+
+    $root = bookkeepingSupportRoot($uid);
+    if (!is_dir($root) && !mkdir($root, 0750, true)) return false;
+
+    $mimeMap = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'application/pdf' => 'pdf',
+    ];
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $saved = [];
+
+    foreach ($_FILES['support_files']['name'] as $index => $originalName) {
+        $error = $_FILES['support_files']['error'][$index] ?? UPLOAD_ERR_NO_FILE;
+        if ($error === UPLOAD_ERR_NO_FILE) continue;
+
+        $tmpPath = $_FILES['support_files']['tmp_name'][$index] ?? '';
+        $size = (int)($_FILES['support_files']['size'][$index] ?? 0);
+        if ($error !== UPLOAD_ERR_OK || !is_uploaded_file($tmpPath) || $size <= 0 || $size > BOOKKEEPING_MAX_UPLOAD_BYTES) return false;
+
+        $mime = $finfo->file($tmpPath);
+        if (!isset($mimeMap[$mime])) return false;
+
+        $fileName = 'bk_' . (int)$uid . '_' . bin2hex(random_bytes(16)) . '.' . $mimeMap[$mime];
+        if (!move_uploaded_file($tmpPath, $root . DIRECTORY_SEPARATOR . $fileName)) return false;
+        $saved[] = 'uploads/bookkeeping/' . (int)$uid . '/' . $fileName;
+    }
+
+    return $saved;
+}
+
 // ==========================================
 // 🚀 AJAX 接口处理 (增删改查)
 // ==========================================
@@ -18,43 +74,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // 添加记录
     if ($action == 'add') {
-        $type = $_POST['type']; 
+        $type = $_POST['type'];
         $amount = floatval($_POST['amount']);
         $date = $_POST['date'];
         $item_name = trim($_POST['item_name']);
-        $company = trim($_POST['company'] ?? '默认公司');   
-        $project_name = trim($_POST['project_name'] ?? ''); 
+        $company = trim($_POST['company'] ?? '默认公司');
+        $project_name = trim($_POST['project_name'] ?? '');
         $status = ($type == '借款') ? '-' : $_POST['status'];
-        $wallet_ids = $_POST['wallet_ids'] ?? ''; 
+        $wallet_ids = $_POST['wallet_ids'] ?? '';
 
-        // 修复：补全了第9个问号，并在数组最后加入了 $wallet_ids
-        $stmt = $pdo->prepare("INSERT INTO bookkeeping (user_id, type, amount, record_date, item_name, company, project_name, status, wallet_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        if($stmt->execute([$uid, $type, $amount, $date, $item_name, $company, $project_name, $status, $wallet_ids])) echo "ok"; else echo "err";
+        $sup_paths = storeBookkeepingSupportFiles($uid);
+        if ($sup_paths === false) {
+            http_response_code(400);
+            echo "err";
+            exit;
+        }
+        $support_path = json_encode($sup_paths);
+
+        $stmt = $pdo->prepare("INSERT INTO bookkeeping (user_id, type, amount, record_date, item_name, company, project_name, status, wallet_ids, support_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        if($stmt->execute([$uid, $type, $amount, $date, $item_name, $company, $project_name, $status, $wallet_ids, $support_path])) echo "ok"; else echo "err";
         exit;
     }
     
     // 更新记录
     if ($action == 'update') {
         $id = intval($_POST['id']);
-        $type = $_POST['type']; 
+        $type = $_POST['type'];
         $amount = floatval($_POST['amount']);
         $date = $_POST['date'];
         $item_name = trim($_POST['item_name']);
-        $company = trim($_POST['company'] ?? '默认公司');   
-        $project_name = trim($_POST['project_name'] ?? ''); 
+        $company = trim($_POST['company'] ?? '默认公司');
+        $project_name = trim($_POST['project_name'] ?? '');
         $status = ($type == '借款') ? '-' : $_POST['status'];
-        $wallet_ids = $_POST['wallet_ids'] ?? ''; 
+        $wallet_ids = $_POST['wallet_ids'] ?? '';
 
-        // 修复：去掉了 WHERE 前面多余的逗号，并在数组里加入了 $wallet_ids
-        $stmt = $pdo->prepare("UPDATE bookkeeping SET type=?, amount=?, record_date=?, item_name=?, company=?, project_name=?, status=?, wallet_ids=? WHERE id=? AND user_id=?");
-        if($stmt->execute([$type, $amount, $date, $item_name, $company, $project_name, $status, $wallet_ids, $id, $uid])) echo "ok"; else echo "err";
+        // 读取已有辅证路径，追加新上传的
+        $stmt_old = $pdo->prepare("SELECT support_path FROM bookkeeping WHERE id=? AND user_id=?");
+        $stmt_old->execute([$id, $uid]);
+        $old_sup = json_decode($stmt_old->fetchColumn() ?: '[]', true) ?: [];
+
+        $new_sup = storeBookkeepingSupportFiles($uid);
+        if ($new_sup === false) {
+            http_response_code(400);
+            echo "err";
+            exit;
+        }
+        $old_sup = array_values(array_filter($old_sup, fn($path) => resolveBookkeepingSupportPath($path, $uid) !== false));
+        $old_sup = array_merge($old_sup, $new_sup);
+        $support_path = json_encode($old_sup);
+
+        $stmt = $pdo->prepare("UPDATE bookkeeping SET type=?, amount=?, record_date=?, item_name=?, company=?, project_name=?, status=?, wallet_ids=?, support_path=? WHERE id=? AND user_id=?");
+        if($stmt->execute([$type, $amount, $date, $item_name, $company, $project_name, $status, $wallet_ids, $support_path, $id, $uid])) echo "ok"; else echo "err";
         exit;
     }
 
-    // 删除记录
+    // 删除记录（同时删除辅证文件）
     if ($action == 'delete') {
         $id = intval($_POST['id']);
+        $stmt_f = $pdo->prepare("SELECT support_path FROM bookkeeping WHERE id=? AND user_id=?");
+        $stmt_f->execute([$id, $uid]);
+        $sup_json = $stmt_f->fetchColumn();
+        if ($sup_json) {
+            foreach (json_decode($sup_json, true) ?: [] as $fp) {
+                $absolutePath = resolveBookkeepingSupportPath($fp, $uid);
+                if ($absolutePath !== false) @unlink($absolutePath);
+            }
+        }
         $pdo->prepare("DELETE FROM bookkeeping WHERE id=? AND user_id=?")->execute([$id, $uid]);
+        echo "ok"; exit;
+    }
+
+    // 删除单张辅证图片
+    if ($action == 'delete_support') {
+        $id = intval($_POST['id']);
+        $del_path = $_POST['path'] ?? '';
+        $stmt_f = $pdo->prepare("SELECT support_path FROM bookkeeping WHERE id=? AND user_id=?");
+        $stmt_f->execute([$id, $uid]);
+        $paths = json_decode($stmt_f->fetchColumn() ?: '[]', true) ?: [];
+        $absolutePath = in_array($del_path, $paths, true) ? resolveBookkeepingSupportPath($del_path, $uid) : false;
+        if ($absolutePath !== false) {
+            @unlink($absolutePath);
+        }
+        $paths = array_values(array_filter($paths, fn($path) => resolveBookkeepingSupportPath($path, $uid) !== false && $path !== $del_path));
+        $pdo->prepare("UPDATE bookkeeping SET support_path=? WHERE id=? AND user_id=?")
+            ->execute([json_encode($paths), $id, $uid]);
         echo "ok"; exit;
     }
 
@@ -91,6 +194,164 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         $stmt = $pdo->prepare("SELECT * FROM bookkeeping WHERE id=? AND user_id=?");
         $stmt->execute([$id, $uid]);
         echo json_encode($stmt->fetch(PDO::FETCH_ASSOC)); exit;
+    }
+
+    // 导出记账本（XLSX 含辅证图片 / CSV 降级）
+    if ($action == 'export') {
+        $company   = trim($_GET['company'] ?? '');
+        $date_from = trim($_GET['date_from'] ?? '');
+        $date_to   = trim($_GET['date_to'] ?? '');
+        $type_f    = trim($_GET['type_f'] ?? '');
+        $status_f  = trim($_GET['status_f'] ?? '');
+
+        $sql = "SELECT id, record_date, company, item_name, type, amount, status, project_name, wallet_ids, support_path
+                FROM bookkeeping WHERE user_id=?";
+        $params = [$uid];
+
+        if ($company !== '') { $sql .= " AND company=?"; $params[] = $company; }
+        if ($date_from !== '') { $sql .= " AND record_date >= ?"; $params[] = $date_from . '-01'; }
+        if ($date_to !== '') {
+            $dt = new DateTime($date_to . '-01');
+            $dt->modify('last day of this month');
+            $sql .= " AND record_date <= ?"; $params[] = $dt->format('Y-m-d');
+        }
+        if ($type_f !== '') { $sql .= " AND type=?"; $params[] = $type_f; }
+        if ($status_f !== '') { $sql .= " AND status=?"; $params[] = $status_f; }
+        $sql .= " ORDER BY record_date ASC, id ASC";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $user_realname = $_SESSION['realname'] ?? '用户';
+        $range = ($date_from ?: '全部') . ($date_to && $date_to !== $date_from ? '至'.$date_to : '');
+        $comp_label = $company ?: '全主体';
+
+        // ── 尝试 XLSX 导出（有图片时必须用 XLSX）──
+        $vendor = file_exists(__DIR__ . '/vendor/autoload.php');
+        if ($vendor) {
+            require_once __DIR__ . '/vendor/autoload.php';
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('记账本');
+
+            // ── 表头样式 ──
+            $headers = ['日期', '公司主体', '事项', '类型', '金额(元)', '报销状态', '项目', '关联发票数', '辅证图片'];
+            $hStyle = [
+                'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                           'startColor' => ['argb' => 'FF1890FF']],
+                'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER],
+                'borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                                               'color' => ['argb' => 'FFD9D9D9']]],
+            ];
+            foreach ($headers as $ci => $h) {
+                $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($ci + 1);
+                $sheet->setCellValue($col . '1', $h);
+                $sheet->getStyle($col . '1')->applyFromArray($hStyle);
+            }
+            // 列宽
+            $colWidths = [13, 20, 28, 10, 12, 10, 16, 12, 22];
+            foreach ($colWidths as $ci => $w) {
+                $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($ci + 1);
+                $sheet->getColumnDimension($col)->setWidth($w);
+            }
+            $sheet->getRowDimension(1)->setRowHeight(22);
+
+            // ── 数据行 ──
+            $dataStyle = [
+                'alignment' => ['vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
+                                'wrapText'  => true],
+                'borders'   => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                                                 'color' => ['argb' => 'FFE8E8E8']]],
+            ];
+
+            $rowNum = 2;
+            foreach ($rows as $r) {
+                $inv_count = ($r['wallet_ids'] !== '' && $r['wallet_ids'] !== null)
+                    ? count(array_filter(explode(',', $r['wallet_ids']))) : 0;
+
+                $supPaths = json_decode($r['support_path'] ?? '[]', true) ?: [];
+                $imgPaths = array_values(array_filter($supPaths, function($p) {
+                    return file_exists($p) && in_array(strtolower(pathinfo($p, PATHINFO_EXTENSION)),
+                        ['jpg','jpeg','png','gif','webp']);
+                }));
+                $imgCount = count($imgPaths);
+
+                // 每张图展示高度 90px ≈ 67.5pt；最小 20pt
+                $rowHeightPt = max(20, $imgCount > 0 ? $imgCount * 80 + 8 : 20);
+
+                $vals = [
+                    $r['record_date'],
+                    $r['company'],
+                    $r['item_name'],
+                    $r['type'],
+                    number_format((float)$r['amount'], 2, '.', ''),
+                    $r['type'] === '借款' ? '-' : $r['status'],
+                    $r['project_name'],
+                    $inv_count > 0 ? $inv_count . '张' : '',
+                    $imgCount > 0 ? '' : (count($supPaths) > 0 ? 'PDF文件' : ''),
+                ];
+                foreach ($vals as $ci => $v) {
+                    $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($ci + 1);
+                    $sheet->setCellValue($col . $rowNum, $v);
+                }
+                $sheet->getStyle('A'.$rowNum.':I'.$rowNum)->applyFromArray($dataStyle);
+                $sheet->getRowDimension($rowNum)->setRowHeight($rowHeightPt);
+
+                // 嵌入辅证图片（纵向堆叠，锚定在 I 列）
+                $imgColLetter = 'I';
+                $yOff = 3;
+                foreach ($imgPaths as $imgPath) {
+                    try {
+                        $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                        $drawing->setPath(realpath($imgPath));
+                        $drawing->setCoordinates($imgColLetter . $rowNum);
+                        $drawing->setOffsetX(3);
+                        $drawing->setOffsetY($yOff);
+                        $drawing->setHeight(72);          // 显示高度 px（等比缩放宽度）
+                        $drawing->setResizeProportional(true);
+                        $drawing->setWorksheet($sheet);
+                        $yOff += 78;
+                    } catch (\Throwable $e) { /* 图片损坏则跳过 */ }
+                }
+
+                $rowNum++;
+            }
+
+            if (ob_get_length()) ob_end_clean();
+            $filename = "{$user_realname}_{$comp_label}_记账本_{$range}.xlsx";
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Cache-Control: max-age=0');
+            \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx')->save('php://output');
+            exit;
+        }
+
+        // ── 降级：纯 CSV（无 Composer 时）──
+        $filename = "{$user_realname}_{$comp_label}_记账本_{$range}.csv";
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        $fp = fopen('php://output', 'w');
+        fwrite($fp, "\xEF\xBB\xBF");
+        fputcsv($fp, ['日期', '公司主体', '事项', '类型', '金额(元)', '报销状态', '项目', '关联发票数', '辅证图片数']);
+        foreach ($rows as $r) {
+            $inv_count = ($r['wallet_ids'] !== '' && $r['wallet_ids'] !== null)
+                ? count(array_filter(explode(',', $r['wallet_ids']))) : 0;
+            $sup_count = count(json_decode($r['support_path'] ?? '[]', true) ?: []);
+            fputcsv($fp, [
+                $r['record_date'], $r['company'], $r['item_name'], $r['type'],
+                number_format((float)$r['amount'], 2, '.', ''),
+                $r['type'] === '借款' ? '-' : $r['status'],
+                $r['project_name'],
+                $inv_count > 0 ? $inv_count . '张' : '',
+                $sup_count > 0 ? $sup_count . '张' : '',
+            ]);
+        }
+        fclose($fp);
+        exit;
     }
 }
 
@@ -208,6 +469,64 @@ $balance_color = $balance >= 0 ? '#52c41a' : '#ff4d4f';
                 <button class="cal-btn" onclick="changeMonth(-1)"><i class="ri-arrow-left-s-line"></i> 上月</button>
                 <button class="cal-btn" onclick="goToday()">本月</button>
                 <button class="cal-btn" onclick="changeMonth(1)">下月 <i class="ri-arrow-right-s-line"></i></button>
+                <button class="cal-btn" onclick="openExportModal()" style="color:#52c41a; border-color:#b7eb8f; background:#f6ffed;"><i class="ri-download-2-line"></i> 导出</button>
+            </div>
+        </div>
+
+        <!-- 导出筛选弹窗 -->
+        <div id="export-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.45); z-index:9999; align-items:center; justify-content:center;">
+            <div style="background:#fff; border-radius:12px; width:420px; max-width:95%; padding:28px; box-shadow:0 12px 32px rgba(0,0,0,0.18);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:22px;">
+                    <h3 style="margin:0; font-size:16px;"><i class="ri-download-2-line" style="color:#52c41a;"></i> 导出记账本</h3>
+                    <button onclick="document.getElementById('export-modal').style.display='none'" style="border:none; background:none; font-size:22px; color:#999; cursor:pointer; line-height:1;">&times;</button>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <div>
+                        <label style="font-size:13px; color:#555; font-weight:bold; display:block; margin-bottom:6px;">公司主体</label>
+                        <select id="exp-company" class="form-control" style="font-size:13px;">
+                            <option value="">全部主体</option>
+                            <?php foreach($sys_companies as $c): ?>
+                                <option value="<?php echo h($c); ?>"><?php echo h($c); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div style="display:flex; gap:10px;">
+                        <div style="flex:1;">
+                            <label style="font-size:13px; color:#555; font-weight:bold; display:block; margin-bottom:6px;">开始月份</label>
+                            <input type="month" id="exp-from" class="form-control" style="font-size:13px;">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:13px; color:#555; font-weight:bold; display:block; margin-bottom:6px;">结束月份</label>
+                            <input type="month" id="exp-to" class="form-control" style="font-size:13px;">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px;">
+                        <div style="flex:1;">
+                            <label style="font-size:13px; color:#555; font-weight:bold; display:block; margin-bottom:6px;">记录类型</label>
+                            <select id="exp-type" class="form-control" style="font-size:13px;">
+                                <option value="">全部</option>
+                                <option value="支出">垫付支出</option>
+                                <option value="借款">借入款项</option>
+                            </select>
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:13px; color:#555; font-weight:bold; display:block; margin-bottom:6px;">报销状态</label>
+                            <select id="exp-status" class="form-control" style="font-size:13px;">
+                                <option value="">全部</option>
+                                <option value="未报销">未报销</option>
+                                <option value="已报销">已报销</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top:22px; display:flex; gap:10px; justify-content:flex-end;">
+                    <button class="btn btn-ghost" onclick="document.getElementById('export-modal').style.display='none'">取消</button>
+                    <button class="btn btn-primary" onclick="doExport()" style="background:#52c41a; border-color:#52c41a;"><i class="ri-download-2-line"></i> 确认导出</button>
+                </div>
             </div>
         </div>
         
@@ -266,6 +585,13 @@ $balance_color = $balance >= 0 ? '#52c41a' : '#ff4d4f';
                     <input type="hidden" id="f-wallet-ids" value="">
                 </div>
 
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px; color:#888; display:block; margin-bottom:5px;"><i class="ri-image-line"></i> 辅证图片 (选填，支持多张，可继续追加)</label>
+                    <input type="file" id="f-support-files" name="support_files[]" multiple accept="image/*,.pdf"
+                        style="width:100%; font-size:13px; padding:4px; border:1px solid #d9d9d9; border-radius:4px; background:#fff;">
+                    <div id="existing-supports" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;"></div>
+                </div>
+
                 <div id="status-container" style="margin-bottom:15px; display:flex; align-items:center; gap:10px; background:#fff; padding:6px 10px; border-radius:6px; border:1px solid #d9d9d9;">
                     <label style="font-size:13px; color:#666; margin:0;">报销状态:</label>
                     <select id="f-status" class="form-control" style="height:28px; padding:0 8px; flex:1; font-size:13px;">
@@ -285,6 +611,37 @@ $balance_color = $balance >= 0 ? '#52c41a' : '#ff4d4f';
 <script src="assets/lunar.js"></script>
 <script>
 
+
+// ==================== 导出功能 ====================
+function openExportModal() {
+    // 默认填入当前日历所在月份
+    let ym = formatMonth(currentDate);
+    document.getElementById('exp-from').value = ym;
+    document.getElementById('exp-to').value = ym;
+    document.getElementById('export-modal').style.display = 'flex';
+}
+
+function doExport() {
+    let company  = document.getElementById('exp-company').value;
+    let dateFrom = document.getElementById('exp-from').value;
+    let dateTo   = document.getElementById('exp-to').value;
+    let typeF    = document.getElementById('exp-type').value;
+    let statusF  = document.getElementById('exp-status').value;
+
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+        alert('开始月份不能晚于结束月份！'); return;
+    }
+
+    let params = new URLSearchParams({ action: 'export' });
+    if (company)  params.set('company', company);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo)   params.set('date_to', dateTo);
+    if (typeF)    params.set('type_f', typeF);
+    if (statusF)  params.set('status_f', statusF);
+
+    window.location.href = 'bookkeeping.php?' + params.toString();
+    document.getElementById('export-modal').style.display = 'none';
+}
 
 // ==================== 日历核心逻辑 ====================
 let currentDate = new Date();
@@ -448,6 +805,7 @@ async function selectDate(dateStr, element = null) {
                             <span style="background:#e6f7ff; color:#1890ff; padding:1px 6px; border-radius:4px; font-size:10px;">${r.company || '默认公司'}</span>
                             ${r.project_name ? `<span><i class="ri-folder-2-line"></i> ${r.project_name}</span>` : ''}
                         </div>
+                        ${buildSupportThumbs(r.support_path)}
                     </div>
                     <div style="display:flex; gap:2px;">
                         <i class="ri-edit-box-line record-act-btn edit" title="编辑" onclick="editRecord(${r.id})"></i>
@@ -471,8 +829,7 @@ async function editRecord(id) {
         document.getElementById('f-type').value = r.type;
         document.getElementById('f-amount').value = r.amount;
         document.getElementById('f-item').value = r.item_name;
-        
-        // 核心修复：填入新的公司和项目，去掉了已删除的 note
+
         document.getElementById('f-company').value = r.company || '默认公司';
         document.getElementById('f-project').value = r.project_name || '';
         document.getElementById('f-wallet-ids').value = r.wallet_ids || '';
@@ -481,7 +838,30 @@ async function editRecord(id) {
             document.getElementById('bk-wallet-btn').style.background = '#f6ffed';
             document.getElementById('bk-wallet-btn').style.borderColor = '#b7eb8f';
         }
-        
+
+        // 回显已有辅证图片
+        let supBox = document.getElementById('existing-supports');
+        supBox.innerHTML = '';
+        let supPaths = [];
+        try { supPaths = JSON.parse(r.support_path || '[]'); } catch(e) {}
+        supPaths.forEach(p => {
+            let safePath = typeof normalizePreviewUrl === 'function' ? normalizePreviewUrl(p) : null;
+            if (!safePath) return;
+            let htmlPath = escapePreviewHtml(safePath);
+            let jsPath = escapePreviewHtml(JSON.stringify(safePath));
+            let storedPath = escapePreviewHtml(JSON.stringify(p));
+            let ext = safePath.split('.').pop().toLowerCase();
+            let isImg = ['jpg','jpeg','png','gif','webp'].includes(ext);
+            let thumb = document.createElement('div');
+            thumb.style.cssText = 'position:relative; display:inline-block;';
+            thumb.innerHTML = isImg
+                ? `<img src="${htmlPath}" style="height:60px; width:auto; border-radius:4px; border:1px solid #d9d9d9; cursor:pointer;" onclick="previewFile(${jsPath}, 'img')" title="${htmlPath}">`
+                : `<div style="height:60px; width:60px; background:#f5f5f5; border:1px solid #d9d9d9; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#666;">PDF</div>`;
+            thumb.innerHTML += `<span onclick="deleteSupportFile(${r.id},${storedPath},this.parentNode)" title="删除此图"
+                style="position:absolute; top:-6px; right:-6px; background:#ff4d4f; color:#fff; border-radius:50%; width:16px; height:16px; font-size:12px; line-height:16px; text-align:center; cursor:pointer;">×</span>`;
+            supBox.appendChild(thumb);
+        });
+
         let sGroup = document.getElementById('status-container');
         if (r.type === '借款') {
             sGroup.style.display = 'none';
@@ -494,6 +874,8 @@ async function editRecord(id) {
         document.getElementById('btn-submit').innerHTML = '<i class="ri-save-line"></i> 更新记录';
         document.getElementById('btn-submit').className = 'btn btn-primary';
         document.getElementById('btn-cancel').style.display = 'block';
+        // 滚动表单入视野
+        document.getElementById('add-record-form').scrollIntoView({behavior:'smooth', block:'nearest'});
     }
 }
 
@@ -501,8 +883,9 @@ async function editRecord(id) {
 function cancelEdit() {
     document.getElementById('add-record-form').reset();
     document.getElementById('f-id').value = '';
-    document.getElementById('f-date').value = selectedDateStr; 
-    document.getElementById('status-container').style.display = 'flex'; // 默认支出，显示状态
+    document.getElementById('f-date').value = selectedDateStr;
+    document.getElementById('status-container').style.display = 'flex';
+    document.getElementById('existing-supports').innerHTML = '';
 
     document.getElementById('form-title-bar').innerHTML = `<span><i class="ri-pencil-fill"></i> 记一笔</span>`;
     document.getElementById('btn-submit').innerHTML = '<i class="ri-check-line"></i> 确认保存';
@@ -514,33 +897,71 @@ function cancelEdit() {
     document.getElementById('bk-wallet-btn').style.borderColor = '#1890ff';
 }
 
-// 提交表单
+// 提交表单 (使用 FormData 支持文件上传)
 async function saveRecord(e) {
     e.preventDefault();
-    let data = new URLSearchParams();
+    let data = new FormData();
     let idVal = document.getElementById('f-id').value;
-    
+
     data.append('action', idVal ? 'update' : 'add');
     if (idVal) data.append('id', idVal);
-    
+
     data.append('date', document.getElementById('f-date').value);
     data.append('type', document.getElementById('f-type').value);
     data.append('amount', document.getElementById('f-amount').value);
     data.append('item_name', document.getElementById('f-item').value);
-    
-    // 核心修复：提交公司和项目，不再提交旧的 note
     data.append('company', document.getElementById('f-company').value);
     data.append('project_name', document.getElementById('f-project').value);
     data.append('status', document.getElementById('f-status').value);
-    
-    // 修复：必须在发送 fetch 请求之前，就把关联的发票 ID 塞进数据包里
     data.append('wallet_ids', document.getElementById('f-wallet-ids').value);
+
+    // 追加辅证文件
+    let fileInput = document.getElementById('f-support-files');
+    for (let file of fileInput.files) {
+        data.append('support_files[]', file);
+    }
 
     let res = await fetch('bookkeeping.php', { method: 'POST', body: data });
     let txt = await res.text();
-    
-    if (txt === 'ok') window.location.href = '?date=' + document.getElementById('f-date').value; 
+
+    if (txt === 'ok') window.location.href = '?date=' + document.getElementById('f-date').value;
     else alert("操作失败！");
+}
+
+// 生成辅证缩略图 HTML（只读展示，点击可预览）
+function buildSupportThumbs(supportPathJson) {
+    let paths = [];
+    try { paths = JSON.parse(supportPathJson || '[]'); } catch(e) {}
+    if (!paths.length) return '';
+    let html = '<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">';
+    paths.forEach(p => {
+        let safePath = typeof normalizePreviewUrl === 'function' ? normalizePreviewUrl(p) : null;
+        if (!safePath) return;
+        let htmlPath = escapePreviewHtml(safePath);
+        let jsPath = escapePreviewHtml(JSON.stringify(safePath));
+        let ext = safePath.split('.').pop().toLowerCase();
+        let isImg = ['jpg','jpeg','png','gif','webp'].includes(ext);
+        html += isImg
+            ? `<img src="${htmlPath}" onclick="previewFile(${jsPath}, 'img')" title="点击预览" style="height:48px; width:auto; border-radius:3px; border:1px solid #d9d9d9; cursor:pointer; object-fit:cover;">`
+            : `<div onclick="window.open(${jsPath}, '_blank', 'noopener,noreferrer')" title="点击打开PDF" style="height:48px; width:48px; background:#fff2e8; border:1px solid #ffbb96; border-radius:3px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:10px; color:#d4380d; font-weight:bold;">PDF</div>`;
+    });
+    html += '</div>';
+    return html;
+}
+
+// 删除单张辅证图片（编辑模式下）
+async function deleteSupportFile(id, path, thumbEl) {
+    if (!confirm('确定删除这张辅证图片吗？')) return;
+    let data = new FormData();
+    data.append('action', 'delete_support');
+    data.append('id', id);
+    data.append('path', path);
+    let res = await fetch('bookkeeping.php', { method: 'POST', body: data });
+    if ((await res.text()) === 'ok') {
+        thumbEl.remove();
+    } else {
+        alert('删除失败');
+    }
 }
 
 async function deleteRecord(id) {
